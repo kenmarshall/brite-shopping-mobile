@@ -5,6 +5,7 @@ const api = axios.create({
 });
 
 export const fetchProducts = () => api.get('/products');
+export const searchProducts = (q) => api.get(`/products?search=${encodeURIComponent(q)}`);
 
 export const fetchProductById = (id) => api.get(`/products/${id}`);
 
