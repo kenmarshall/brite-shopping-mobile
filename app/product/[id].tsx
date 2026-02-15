@@ -12,35 +12,53 @@ import {
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
+import { ButtonSize, CardShadow, FontSize, Radius, Spacing } from '@/constants/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { type Product, getProduct } from '@/services/api';
+import { addToList, isInList } from '@/services/shoppingList';
+import { formatPrice } from '@/utils/format';
 
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [inList, setInList] = useState(false);
+  const [addedFeedback, setAddedFeedback] = useState(false);
   const colorScheme = useColorScheme() ?? 'light';
+  const colors = Colors[colorScheme];
   const router = useRouter();
 
   useEffect(() => {
     if (!id) return;
     setLoading(true);
     getProduct(id)
-      .then(setProduct)
+      .then((p) => {
+        setProduct(p);
+        isInList(p._id).then(setInList);
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [id]);
 
-  const formatPrice = (amount: number, currency = 'JMD') => {
-    if (currency === 'USD') return `US$${amount.toFixed(2)}`;
-    return `$${amount.toFixed(2)}`;
+  const handleAddToList = async () => {
+    if (!product) return;
+    await addToList({
+      productId: product._id,
+      name: product.name,
+      brand: product.brand,
+      estimatedPrice: product.estimated_price,
+      imageUrl: product.image_url,
+    });
+    setInList(true);
+    setAddedFeedback(true);
+    setTimeout(() => setAddedFeedback(false), 1500);
   };
 
   if (loading) {
     return (
       <ThemedView style={styles.centered}>
-        <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
+        <ActivityIndicator size="large" color={colors.tint} />
       </ThemedView>
     );
   }
@@ -48,8 +66,15 @@ export default function ProductDetailScreen() {
   if (error || !product) {
     return (
       <ThemedView style={styles.centered}>
-        <ThemedText style={styles.errorText}>{error || 'Product not found'}</ThemedText>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
+        <ThemedText style={[styles.errorText, { color: colors.error }]}>
+          {error || 'Product not found'}
+        </ThemedText>
+        <Pressable
+          onPress={() => router.back()}
+          style={[styles.backButton, { backgroundColor: colors.tint }]}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <ThemedText style={styles.backButtonText}>Go Back</ThemedText>
         </Pressable>
       </ThemedView>
@@ -62,15 +87,29 @@ export default function ProductDetailScreen() {
   return (
     <ThemedView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Pressable onPress={() => router.back()} style={styles.backNav}>
-          <ThemedText style={styles.backArrow}>{'<'} Back</ThemedText>
+        <Pressable
+          onPress={() => router.back()}
+          style={styles.backNav}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+          hitSlop={8}
+        >
+          <ThemedText style={[styles.backArrow, { color: colors.tint }]}>
+            {'<'} Back
+          </ThemedText>
         </Pressable>
 
         {product.image_url && !product.image_url.startsWith('data:image/svg') ? (
-          <Image source={{ uri: product.image_url }} style={styles.heroImage} contentFit="contain" />
+          <Image
+            source={{ uri: product.image_url }}
+            style={[styles.heroImage, { backgroundColor: colors.backgroundSecondary }]}
+            contentFit="contain"
+          />
         ) : (
-          <View style={[styles.heroImage, styles.placeholderImage]}>
-            <ThemedText style={{ color: '#999', fontSize: 16 }}>No Image</ThemedText>
+          <View style={[styles.heroImage, { backgroundColor: colors.placeholder }]}>
+            <ThemedText style={{ color: colors.placeholderText, fontSize: FontSize.md }}>
+              No Image
+            </ThemedText>
           </View>
         )}
 
@@ -78,11 +117,13 @@ export default function ProductDetailScreen() {
           <ThemedText type="title" style={styles.name}>{product.name}</ThemedText>
 
           {product.brand && (
-            <ThemedText style={styles.brand}>{product.brand}</ThemedText>
+            <ThemedText style={[styles.brand, { color: colors.textSecondary }]}>
+              {product.brand}
+            </ThemedText>
           )}
 
           {product.size.value && (
-            <ThemedText style={styles.size}>
+            <ThemedText style={[styles.size, { color: colors.textSecondary }]}>
               {product.size.value} {product.size.unit}
             </ThemedText>
           )}
@@ -96,21 +137,42 @@ export default function ProductDetailScreen() {
           {product.tags.length > 0 && (
             <View style={styles.tagsRow}>
               {product.tags.map((tag) => (
-                <View key={tag} style={styles.tag}>
-                  <ThemedText style={styles.tagText}>{tag}</ThemedText>
+                <View key={tag} style={[styles.tag, { backgroundColor: colors.backgroundSecondary }]}>
+                  <ThemedText style={[styles.tagText, { color: colors.textSecondary }]}>
+                    {tag}
+                  </ThemedText>
                 </View>
               ))}
             </View>
           )}
 
-          <View style={styles.estimatedPriceBox}>
+          <View style={[styles.estimatedPriceBox, { backgroundColor: colors.tint }]}>
             <ThemedText style={styles.estimatedLabel}>Estimated Price</ThemedText>
             <ThemedText style={styles.estimatedPrice}>
-              {product.estimated_price != null
-                ? formatPrice(product.estimated_price)
-                : 'Unavailable'}
+              {formatPrice(product.estimated_price)}
             </ThemedText>
           </View>
+
+          <Pressable
+            style={[
+              styles.addToListButton,
+              { backgroundColor: colors.tint },
+              addedFeedback && { backgroundColor: colors.success },
+            ]}
+            onPress={handleAddToList}
+            accessibilityRole="button"
+            accessibilityLabel={
+              addedFeedback
+                ? 'Added to shopping list'
+                : inList
+                  ? 'Add another to shopping list'
+                  : 'Add to shopping list'
+            }
+          >
+            <ThemedText style={styles.addToListText}>
+              {addedFeedback ? 'Added!' : inList ? '+ Add Another' : '+ Add to Shopping List'}
+            </ThemedText>
+          </Pressable>
 
           <ThemedText type="subtitle" style={styles.pricesHeader}>
             Prices by Store ({sortedPrices.length})
@@ -121,8 +183,11 @@ export default function ProductDetailScreen() {
               key={lp.location_id}
               style={[
                 styles.priceCard,
-                { backgroundColor: colorScheme === 'dark' ? '#1E2022' : '#fff' },
-                index === 0 && styles.bestPriceCard,
+                { backgroundColor: colors.card },
+                index === 0 && sortedPrices.length > 1 && {
+                  borderWidth: 2,
+                  borderColor: colors.success,
+                },
               ]}
             >
               <View style={styles.priceCardContent}>
@@ -130,19 +195,23 @@ export default function ProductDetailScreen() {
                   <ThemedText style={styles.storeName}>
                     {lp.store_name || lp.location_id}
                   </ThemedText>
-                  <ThemedText style={styles.currency}>{lp.currency}</ThemedText>
+                  <ThemedText style={[styles.currency, { color: colors.textSecondary }]}>
+                    {lp.currency}
+                  </ThemedText>
                 </View>
                 <View style={styles.priceRight}>
                   <ThemedText
                     style={[
                       styles.priceAmount,
-                      lp.amount === lowestPrice && styles.bestPrice,
+                      lp.amount === lowestPrice && { color: colors.success },
                     ]}
                   >
                     {formatPrice(lp.amount, lp.currency)}
                   </ThemedText>
                   {index === 0 && sortedPrices.length > 1 && (
-                    <ThemedText style={styles.bestLabel}>Best Price</ThemedText>
+                    <ThemedText style={[styles.bestLabel, { color: colors.success }]}>
+                      Best Price
+                    </ThemedText>
                   )}
                 </View>
               </View>
@@ -150,7 +219,9 @@ export default function ProductDetailScreen() {
           ))}
 
           {sortedPrices.length === 0 && (
-            <ThemedText style={styles.noPrices}>No prices available yet</ThemedText>
+            <ThemedText style={[styles.noPrices, { color: colors.textSecondary }]}>
+              No prices available yet
+            </ThemedText>
           )}
         </View>
       </ScrollView>
@@ -166,110 +237,104 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: Spacing.xl,
   },
   scroll: {
     paddingBottom: 40,
   },
   backNav: {
-    paddingTop: 56,
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingTop: Spacing.headerTop,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.sm,
   },
   backArrow: {
-    fontSize: 16,
-    color: '#0a7ea4',
+    fontSize: FontSize.md,
     fontWeight: '600',
   },
   heroImage: {
     width: '100%',
     height: 250,
-    backgroundColor: '#F5F5F5',
-  },
-  placeholderImage: {
     justifyContent: 'center',
     alignItems: 'center',
   },
   details: {
-    padding: 16,
+    padding: Spacing.lg,
   },
   name: {
-    fontSize: 24,
-    marginBottom: 4,
+    fontSize: FontSize.xxl,
+    marginBottom: Spacing.xs,
   },
   brand: {
-    fontSize: 16,
-    color: '#888',
-    marginBottom: 4,
+    fontSize: FontSize.md,
+    marginBottom: Spacing.xs,
   },
   size: {
-    fontSize: 14,
-    color: '#888',
-    marginBottom: 8,
+    fontSize: FontSize.sm,
+    marginBottom: Spacing.sm,
   },
   categoryBadge: {
     alignSelf: 'flex-start',
     backgroundColor: '#E3F2FD',
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginBottom: 8,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.md,
+    marginBottom: Spacing.sm,
   },
   categoryText: {
-    fontSize: 13,
+    fontSize: FontSize.sm,
     color: '#1565C0',
   },
   tagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   tag: {
-    backgroundColor: '#F0F0F0',
-    paddingHorizontal: 8,
+    paddingHorizontal: Spacing.sm,
     paddingVertical: 3,
-    borderRadius: 8,
+    borderRadius: Radius.sm,
   },
   tagText: {
-    fontSize: 12,
-    color: '#555',
+    fontSize: FontSize.xs,
   },
   estimatedPriceBox: {
-    backgroundColor: '#0a7ea4',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    marginBottom: 20,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.xl,
+    marginBottom: Spacing.xl,
     alignItems: 'center',
   },
   estimatedLabel: {
-    color: '#D4EEF5',
-    fontSize: 13,
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: FontSize.sm,
     marginBottom: 6,
   },
   estimatedPrice: {
     color: '#fff',
-    fontSize: 28,
+    fontSize: FontSize.hero,
     fontWeight: '700',
     lineHeight: 34,
   },
+  addToListButton: {
+    borderRadius: Radius.sm,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
+  },
+  addToListText: {
+    color: '#fff',
+    fontSize: FontSize.md,
+    fontWeight: '700',
+  },
   pricesHeader: {
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   priceCard: {
-    borderRadius: 10,
+    borderRadius: Radius.md,
     padding: 14,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  bestPriceCard: {
-    borderWidth: 2,
-    borderColor: '#4CAF50',
+    marginBottom: Spacing.sm,
+    ...CardShadow,
   },
   priceCardContent: {
     flexDirection: 'row',
@@ -277,45 +342,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   storeName: {
-    fontSize: 15,
+    fontSize: FontSize.md,
     fontWeight: '600',
   },
   currency: {
-    fontSize: 12,
-    color: '#888',
+    fontSize: FontSize.xs,
     marginTop: 2,
   },
   priceRight: {
     alignItems: 'flex-end',
   },
   priceAmount: {
-    fontSize: 18,
+    fontSize: FontSize.lg,
     fontWeight: '700',
   },
-  bestPrice: {
-    color: '#4CAF50',
-  },
   bestLabel: {
-    fontSize: 11,
-    color: '#4CAF50',
+    fontSize: FontSize.xs,
     fontWeight: '600',
     marginTop: 2,
   },
   noPrices: {
-    color: '#888',
     textAlign: 'center',
-    marginTop: 20,
+    marginTop: Spacing.xl,
   },
   errorText: {
-    color: '#D32F2F',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   backButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#0a7ea4',
-    borderRadius: 8,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.sm,
   },
   backButtonText: {
     color: '#fff',

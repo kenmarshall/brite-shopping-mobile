@@ -19,6 +19,7 @@ const MAPPING = {
   'magnifyingglass': 'search',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  'list.bullet': 'list',
 } as IconMapping;
 
 /**

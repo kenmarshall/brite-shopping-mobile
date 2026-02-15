@@ -14,6 +14,7 @@ import {
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
+import { ButtonSize, CardShadow, FontSize, Radius, Spacing } from '@/constants/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import {
   type Product,
@@ -21,6 +22,8 @@ import {
   getCategories,
   searchProducts,
 } from '@/services/api';
+import { addToList } from '@/services/shoppingList';
+import { formatPrice, formatStoreCount } from '@/utils/format';
 
 export default function SearchScreen() {
   const [query, setQuery] = useState('');
@@ -30,6 +33,7 @@ export default function SearchScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const colorScheme = useColorScheme() ?? 'light';
+  const colors = Colors[colorScheme];
   const router = useRouter();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -40,7 +44,6 @@ export default function SearchScreen() {
       try {
         let results: Product[];
         if (searchQuery.trim()) {
-          // Unified search: the API text index covers name, brand, category, and tags
           results = await searchProducts(searchQuery);
         } else if (category) {
           results = await searchProducts('', { category });
@@ -83,21 +86,24 @@ export default function SearchScreen() {
     fetchProducts('', next);
   };
 
-  const formatPrice = (price: number | null, currency = 'JMD') => {
-    if (price == null) return 'Price unavailable';
-    if (currency === 'USD') return `US$${price.toFixed(2)}`;
-    return `$${price.toFixed(2)}`;
+  const handleQuickAdd = async (item: Product) => {
+    await addToList({
+      productId: item._id,
+      name: item.name,
+      brand: item.brand,
+      estimatedPrice: item.estimated_price,
+      imageUrl: item.image_url,
+    });
   };
 
   const renderProduct = ({ item }: { item: Product }) => (
     <Pressable
-      style={[
-        styles.card,
-        { backgroundColor: colorScheme === 'dark' ? '#1E2022' : '#fff' },
-      ]}
+      style={[styles.card, { backgroundColor: colors.card }]}
       onPress={() =>
         router.push({ pathname: '/product/[id]', params: { id: item._id } })
       }
+      accessibilityRole="button"
+      accessibilityLabel={`${item.name}, ${formatPrice(item.estimated_price)}`}
     >
       {item.image_url && !item.image_url.startsWith('data:image/svg') ? (
         <Image
@@ -106,8 +112,10 @@ export default function SearchScreen() {
           contentFit="cover"
         />
       ) : (
-        <View style={[styles.productImage, styles.placeholderImage]}>
-          <ThemedText style={styles.placeholderText}>No Image</ThemedText>
+        <View style={[styles.productImage, { backgroundColor: colors.placeholder }]}>
+          <ThemedText style={{ fontSize: FontSize.xs, color: colors.placeholderText }}>
+            No Image
+          </ThemedText>
         </View>
       )}
       <View style={styles.cardContent}>
@@ -115,18 +123,37 @@ export default function SearchScreen() {
           {item.name}
         </ThemedText>
         {item.brand && (
-          <ThemedText style={styles.brand}>{item.brand}</ThemedText>
+          <ThemedText style={[styles.secondaryText, { color: colors.textSecondary }]}>
+            {item.brand}
+          </ThemedText>
         )}
         {item.category && (
-          <ThemedText style={styles.categoryLabel}>{item.category}</ThemedText>
+          <ThemedText style={[styles.categoryLabel, { color: colors.tint }]}>
+            {item.category}
+          </ThemedText>
         )}
-        <ThemedText style={styles.price}>
-          {formatPrice(item.estimated_price)}
-        </ThemedText>
-        <ThemedText style={styles.storeCount}>
-          {item.location_prices.length} store
-          {item.location_prices.length !== 1 ? 's' : ''}
-        </ThemedText>
+        <View style={styles.priceRow}>
+          <View>
+            <ThemedText style={[styles.price, { color: colors.tint }]}>
+              {formatPrice(item.estimated_price)}
+            </ThemedText>
+            <ThemedText style={[styles.storeCount, { color: colors.textSecondary }]}>
+              {formatStoreCount(item.location_prices.length)}
+            </ThemedText>
+          </View>
+          <Pressable
+            style={[styles.quickAddButton, { backgroundColor: colors.tint }]}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              handleQuickAdd(item);
+            }}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Add ${item.name} to shopping list`}
+          >
+            <ThemedText style={styles.quickAddText}>+</ThemedText>
+          </Pressable>
+        </View>
       </View>
     </Pressable>
   );
@@ -141,17 +168,17 @@ export default function SearchScreen() {
           style={[
             styles.searchInput,
             {
-              backgroundColor:
-                colorScheme === 'dark' ? '#2A2D2F' : '#F0F0F0',
-              color: Colors[colorScheme].text,
+              backgroundColor: colors.backgroundSecondary,
+              color: colors.text,
             },
           ]}
           placeholder="Search products, brands, categories..."
-          placeholderTextColor={Colors[colorScheme].icon}
+          placeholderTextColor={colors.icon}
           value={query}
           onChangeText={handleSearch}
           autoCapitalize="none"
           autoCorrect={false}
+          accessibilityLabel="Search products"
         />
         {categories.length > 0 && (
           <ScrollView
@@ -166,13 +193,13 @@ export default function SearchScreen() {
                 style={[
                   styles.chip,
                   activeCategory === cat
-                    ? styles.chipActive
-                    : {
-                        backgroundColor:
-                          colorScheme === 'dark' ? '#2A2D2F' : '#F0F0F0',
-                      },
+                    ? { backgroundColor: colors.tint }
+                    : { backgroundColor: colors.backgroundSecondary },
                 ]}
                 onPress={() => handleCategoryPress(cat)}
+                accessibilityRole="button"
+                accessibilityLabel={`Filter by ${cat}`}
+                accessibilityState={{ selected: activeCategory === cat }}
               >
                 <ThemedText
                   style={[
@@ -190,14 +217,16 @@ export default function SearchScreen() {
 
       {loading && products.length === 0 ? (
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={Colors[colorScheme].tint} />
+          <ActivityIndicator size="large" color={colors.tint} />
         </View>
       ) : error ? (
         <View style={styles.centered}>
-          <ThemedText style={styles.errorText}>{error}</ThemedText>
+          <ThemedText style={[styles.errorText, { color: colors.error }]}>{error}</ThemedText>
           <Pressable
             onPress={() => fetchProducts(query, activeCategory)}
-            style={styles.retryButton}
+            style={[styles.retryButton, { backgroundColor: colors.tint }]}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading products"
           >
             <ThemedText style={styles.retryText}>Retry</ThemedText>
           </Pressable>
@@ -210,7 +239,7 @@ export default function SearchScreen() {
           contentContainerStyle={styles.list}
           ListEmptyComponent={
             <View style={styles.centered}>
-              <ThemedText style={styles.emptyText}>
+              <ThemedText style={[styles.emptyText, { color: colors.textSecondary }]}>
                 {query || activeCategory
                   ? 'No products found'
                   : 'No products available'}
@@ -228,122 +257,119 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingTop: 60,
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingTop: Spacing.headerTop,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.sm,
   },
   headerTitle: {
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   searchInput: {
-    height: 44,
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    fontSize: 16,
+    height: ButtonSize.touch,
+    borderRadius: Radius.sm,
+    paddingHorizontal: Spacing.lg,
+    fontSize: FontSize.md,
   },
   chipRow: {
-    marginTop: 10,
+    marginTop: Spacing.sm,
     maxHeight: 36,
   },
   chipContent: {
-    gap: 8,
-    paddingRight: 8,
+    gap: Spacing.sm,
+    paddingRight: Spacing.sm,
   },
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: 18,
-  },
-  chipActive: {
-    backgroundColor: '#0a7ea4',
+    borderRadius: Radius.lg,
   },
   chipText: {
-    fontSize: 13,
+    fontSize: FontSize.sm,
     fontWeight: '500',
   },
   chipTextActive: {
     color: '#fff',
   },
   list: {
-    padding: 16,
-    gap: 12,
+    padding: Spacing.lg,
+    gap: Spacing.md,
   },
   card: {
     flexDirection: 'row',
-    borderRadius: 12,
+    borderRadius: Radius.md,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
+    ...CardShadow,
   },
   productImage: {
     width: 100,
     height: 100,
-  },
-  placeholderImage: {
-    backgroundColor: '#E0E0E0',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  placeholderText: {
-    fontSize: 12,
-    color: '#999',
-  },
   cardContent: {
     flex: 1,
-    padding: 12,
+    padding: Spacing.md,
     justifyContent: 'center',
   },
   productName: {
-    fontSize: 15,
+    fontSize: FontSize.md,
     fontWeight: '600',
     marginBottom: 2,
   },
-  brand: {
-    fontSize: 13,
-    color: '#888',
+  secondaryText: {
+    fontSize: FontSize.sm,
     marginBottom: 2,
   },
   categoryLabel: {
-    fontSize: 11,
-    color: '#0a7ea4',
-    marginBottom: 4,
+    fontSize: FontSize.xs,
+    marginBottom: Spacing.xs,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   price: {
-    fontSize: 17,
+    fontSize: FontSize.lg,
     fontWeight: '700',
-    color: '#0a7ea4',
   },
   storeCount: {
-    fontSize: 12,
-    color: '#888',
+    fontSize: FontSize.xs,
     marginTop: 2,
+  },
+  quickAddButton: {
+    width: ButtonSize.small,
+    height: ButtonSize.small,
+    borderRadius: ButtonSize.small / 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  quickAddText: {
+    color: '#fff',
+    fontSize: FontSize.xl,
+    fontWeight: '700',
+    lineHeight: 22,
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: Spacing.xl,
   },
   errorText: {
-    color: '#D32F2F',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   retryButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#0a7ea4',
-    borderRadius: 8,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.sm,
   },
   retryText: {
     color: '#fff',
     fontWeight: '600',
   },
   emptyText: {
-    color: '#888',
-    fontSize: 16,
+    fontSize: FontSize.md,
   },
 });
