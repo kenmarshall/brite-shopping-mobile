@@ -90,7 +90,6 @@ export default function SearchScreen() {
     await addToList({
       productId: item._id,
       name: item.name,
-      brand: item.brand,
       estimatedPrice: item.estimated_price,
       imageUrl: item.image_url,
     });
@@ -122,11 +121,6 @@ export default function SearchScreen() {
         <ThemedText style={styles.productName} numberOfLines={2}>
           {item.name}
         </ThemedText>
-        {item.brand && (
-          <ThemedText style={[styles.secondaryText, { color: colors.textSecondary }]}>
-            {item.brand}
-          </ThemedText>
-        )}
         {item.category && (
           <ThemedText style={[styles.categoryLabel, { color: colors.tint }]}>
             {item.category}

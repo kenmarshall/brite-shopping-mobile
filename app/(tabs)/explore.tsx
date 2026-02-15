@@ -98,11 +98,6 @@ export default function ShoppingListScreen() {
       )}
       <View style={styles.itemContent}>
         <ThemedText style={styles.itemName} numberOfLines={2}>{item.name}</ThemedText>
-        {item.brand && (
-          <ThemedText style={[styles.itemBrand, { color: colors.textSecondary }]}>
-            {item.brand}
-          </ThemedText>
-        )}
         <ThemedText style={[styles.itemPrice, { color: colors.tint }]}>
           {formatPrice(item.estimatedPrice)}
           {item.quantity > 1 ? ` x ${item.quantity}` : ''}

@@ -46,7 +46,6 @@ export default function ProductDetailScreen() {
     await addToList({
       productId: product._id,
       name: product.name,
-      brand: product.brand,
       estimatedPrice: product.estimated_price,
       imageUrl: product.image_url,
     });
@@ -115,12 +114,6 @@ export default function ProductDetailScreen() {
 
         <View style={styles.details}>
           <ThemedText type="title" style={styles.name}>{product.name}</ThemedText>
-
-          {product.brand && (
-            <ThemedText style={[styles.brand, { color: colors.textSecondary }]}>
-              {product.brand}
-            </ThemedText>
-          )}
 
           {product.size.value && (
             <ThemedText style={[styles.size, { color: colors.textSecondary }]}>
