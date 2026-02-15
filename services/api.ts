@@ -26,6 +26,14 @@ export interface Product {
   url: string;
 }
 
+export interface SearchParams {
+  q?: string;
+  category?: string;
+  tag?: string;
+  store_id?: string;
+  limit?: number;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     headers: { 'Content-Type': 'application/json' },
@@ -38,18 +46,41 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return response.json();
 }
 
-export async function searchProducts(query: string): Promise<Product[]> {
-  return request<Product[]>(`/products?name=${encodeURIComponent(query)}`);
+export async function searchProducts(query: string, filters?: Omit<SearchParams, 'q'>): Promise<Product[]> {
+  const params = new URLSearchParams();
+  if (query.trim()) params.set('q', query);
+  if (filters?.category) params.set('category', filters.category);
+  if (filters?.tag) params.set('tag', filters.tag);
+  if (filters?.store_id) params.set('store_id', filters.store_id);
+  if (filters?.limit) params.set('limit', String(filters.limit));
+  return request<Product[]>(`/products?${params.toString()}`);
+}
+
+export async function browseByCategory(category: string, limit?: number): Promise<Product[]> {
+  const params = new URLSearchParams({ category });
+  if (limit) params.set('limit', String(limit));
+  return request<Product[]>(`/products?${params.toString()}`);
+}
+
+export async function browseByTag(tag: string, limit?: number): Promise<Product[]> {
+  const params = new URLSearchParams({ tag });
+  if (limit) params.set('limit', String(limit));
+  return request<Product[]>(`/products?${params.toString()}`);
 }
 
 export async function getProduct(id: string): Promise<Product> {
   return request<Product>(`/products/${id}`);
 }
 
-export async function getAllProducts(): Promise<Product[]> {
-  return request<Product[]>('/products');
+export async function getAllProducts(limit?: number): Promise<Product[]> {
+  const params = limit ? `?limit=${limit}` : '';
+  return request<Product[]>(`/products${params}`);
 }
 
 export async function getProductPrices(id: string): Promise<LocationPrice[]> {
   return request<LocationPrice[]>(`/products/${id}/prices`);
+}
+
+export async function getCategories(): Promise<string[]> {
+  return request<string[]>('/categories');
 }

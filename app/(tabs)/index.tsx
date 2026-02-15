@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   FlatList,
   Pressable,
+  ScrollView,
   StyleSheet,
   TextInput,
   View,
@@ -14,40 +15,72 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { type Product, getAllProducts, searchProducts } from '@/services/api';
+import {
+  type Product,
+  getAllProducts,
+  getCategories,
+  searchProducts,
+} from '@/services/api';
 
 export default function SearchScreen() {
   const [query, setQuery] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchProducts = useCallback(async (searchQuery: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const results = searchQuery.trim()
-        ? await searchProducts(searchQuery)
-        : await getAllProducts();
-      setProducts(results);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load products');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const fetchProducts = useCallback(
+    async (searchQuery: string, category?: string | null) => {
+      setLoading(true);
+      setError(null);
+      try {
+        let results: Product[];
+        if (searchQuery.trim()) {
+          // Unified search: the API text index covers name, brand, category, and tags
+          results = await searchProducts(searchQuery);
+        } else if (category) {
+          results = await searchProducts('', { category });
+        } else {
+          results = await getAllProducts();
+        }
+        setProducts(results);
+      } catch (err: any) {
+        setError(err.message || 'Failed to load products');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     fetchProducts('');
+    getCategories()
+      .then(setCategories)
+      .catch(() => {});
   }, [fetchProducts]);
 
   const handleSearch = (text: string) => {
     setQuery(text);
+    if (text.trim()) {
+      setActiveCategory(null);
+    }
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => fetchProducts(text), 400);
+    debounceRef.current = setTimeout(
+      () => fetchProducts(text, text.trim() ? null : activeCategory),
+      400,
+    );
+  };
+
+  const handleCategoryPress = (category: string) => {
+    const next = activeCategory === category ? null : category;
+    setActiveCategory(next);
+    setQuery('');
+    fetchProducts('', next);
   };
 
   const formatPrice = (price: number | null, currency = 'JMD') => {
@@ -58,11 +91,20 @@ export default function SearchScreen() {
 
   const renderProduct = ({ item }: { item: Product }) => (
     <Pressable
-      style={[styles.card, { backgroundColor: colorScheme === 'dark' ? '#1E2022' : '#fff' }]}
-      onPress={() => router.push({ pathname: '/product/[id]', params: { id: item._id } })}
+      style={[
+        styles.card,
+        { backgroundColor: colorScheme === 'dark' ? '#1E2022' : '#fff' },
+      ]}
+      onPress={() =>
+        router.push({ pathname: '/product/[id]', params: { id: item._id } })
+      }
     >
-      {item.image_url ? (
-        <Image source={{ uri: item.image_url }} style={styles.productImage} contentFit="cover" />
+      {item.image_url && !item.image_url.startsWith('data:image/svg') ? (
+        <Image
+          source={{ uri: item.image_url }}
+          style={styles.productImage}
+          contentFit="cover"
+        />
       ) : (
         <View style={[styles.productImage, styles.placeholderImage]}>
           <ThemedText style={styles.placeholderText}>No Image</ThemedText>
@@ -75,11 +117,15 @@ export default function SearchScreen() {
         {item.brand && (
           <ThemedText style={styles.brand}>{item.brand}</ThemedText>
         )}
+        {item.category && (
+          <ThemedText style={styles.categoryLabel}>{item.category}</ThemedText>
+        )}
         <ThemedText style={styles.price}>
           {formatPrice(item.estimated_price)}
         </ThemedText>
         <ThemedText style={styles.storeCount}>
-          {item.location_prices.length} store{item.location_prices.length !== 1 ? 's' : ''}
+          {item.location_prices.length} store
+          {item.location_prices.length !== 1 ? 's' : ''}
         </ThemedText>
       </View>
     </Pressable>
@@ -95,17 +141,51 @@ export default function SearchScreen() {
           style={[
             styles.searchInput,
             {
-              backgroundColor: colorScheme === 'dark' ? '#2A2D2F' : '#F0F0F0',
+              backgroundColor:
+                colorScheme === 'dark' ? '#2A2D2F' : '#F0F0F0',
               color: Colors[colorScheme].text,
             },
           ]}
-          placeholder="Search products..."
+          placeholder="Search products, brands, categories..."
           placeholderTextColor={Colors[colorScheme].icon}
           value={query}
           onChangeText={handleSearch}
           autoCapitalize="none"
           autoCorrect={false}
         />
+        {categories.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipRow}
+            contentContainerStyle={styles.chipContent}
+          >
+            {categories.map((cat) => (
+              <Pressable
+                key={cat}
+                style={[
+                  styles.chip,
+                  activeCategory === cat
+                    ? styles.chipActive
+                    : {
+                        backgroundColor:
+                          colorScheme === 'dark' ? '#2A2D2F' : '#F0F0F0',
+                      },
+                ]}
+                onPress={() => handleCategoryPress(cat)}
+              >
+                <ThemedText
+                  style={[
+                    styles.chipText,
+                    activeCategory === cat && styles.chipTextActive,
+                  ]}
+                >
+                  {cat}
+                </ThemedText>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
       </View>
 
       {loading && products.length === 0 ? (
@@ -115,7 +195,10 @@ export default function SearchScreen() {
       ) : error ? (
         <View style={styles.centered}>
           <ThemedText style={styles.errorText}>{error}</ThemedText>
-          <Pressable onPress={() => fetchProducts(query)} style={styles.retryButton}>
+          <Pressable
+            onPress={() => fetchProducts(query, activeCategory)}
+            style={styles.retryButton}
+          >
             <ThemedText style={styles.retryText}>Retry</ThemedText>
           </Pressable>
         </View>
@@ -128,7 +211,9 @@ export default function SearchScreen() {
           ListEmptyComponent={
             <View style={styles.centered}>
               <ThemedText style={styles.emptyText}>
-                {query ? 'No products found' : 'No products available'}
+                {query || activeCategory
+                  ? 'No products found'
+                  : 'No products available'}
               </ThemedText>
             </View>
           }
@@ -145,7 +230,7 @@ const styles = StyleSheet.create({
   header: {
     paddingTop: 60,
     paddingHorizontal: 16,
-    paddingBottom: 12,
+    paddingBottom: 8,
   },
   headerTitle: {
     marginBottom: 12,
@@ -155,6 +240,29 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 16,
     fontSize: 16,
+  },
+  chipRow: {
+    marginTop: 10,
+    maxHeight: 36,
+  },
+  chipContent: {
+    gap: 8,
+    paddingRight: 8,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 18,
+  },
+  chipActive: {
+    backgroundColor: '#0a7ea4',
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  chipTextActive: {
+    color: '#fff',
   },
   list: {
     padding: 16,
@@ -196,6 +304,11 @@ const styles = StyleSheet.create({
   brand: {
     fontSize: 13,
     color: '#888',
+    marginBottom: 2,
+  },
+  categoryLabel: {
+    fontSize: 11,
+    color: '#0a7ea4',
     marginBottom: 4,
   },
   price: {
