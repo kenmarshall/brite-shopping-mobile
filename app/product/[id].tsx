@@ -66,7 +66,7 @@ export default function ProductDetailScreen() {
           <ThemedText style={styles.backArrow}>{'<'} Back</ThemedText>
         </Pressable>
 
-        {product.image_url ? (
+        {product.image_url && !product.image_url.startsWith('data:image/svg') ? (
           <Image source={{ uri: product.image_url }} style={styles.heroImage} contentFit="contain" />
         ) : (
           <View style={[styles.heroImage, styles.placeholderImage]}>
@@ -238,19 +238,21 @@ const styles = StyleSheet.create({
   estimatedPriceBox: {
     backgroundColor: '#0a7ea4',
     borderRadius: 12,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 20,
     marginBottom: 20,
     alignItems: 'center',
   },
   estimatedLabel: {
     color: '#D4EEF5',
     fontSize: 13,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   estimatedPrice: {
     color: '#fff',
     fontSize: 28,
     fontWeight: '700',
+    lineHeight: 34,
   },
   pricesHeader: {
     marginBottom: 12,

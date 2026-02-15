@@ -1,6 +1,4 @@
-const API_BASE_URL = __DEV__
-  ? 'http://localhost:5000'
-  : 'https://brite-shopping-api.onrender.com';
+const API_BASE_URL = 'https://brite-shopping-api.onrender.com';
 
 export interface LocationPrice {
   location_id: string;
