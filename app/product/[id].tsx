@@ -12,7 +12,7 @@ import {
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
-import { ButtonSize, CardShadow, FontSize, Radius, Spacing } from '@/constants/Theme';
+import { CardShadow, FontSize, Radius, Spacing } from '@/constants/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { type Product, getProduct } from '@/services/api';
 import { addToList, isInList } from '@/services/shoppingList';

@@ -82,3 +82,39 @@ export async function getProductPrices(id: string): Promise<LocationPrice[]> {
 export async function getCategories(): Promise<string[]> {
   return request<string[]>('/categories');
 }
+
+export interface Store {
+  store_id: string;
+  store_name: string;
+  product_count: number;
+}
+
+export async function getStores(): Promise<Store[]> {
+  return request<Store[]>('/product-stores');
+}
+
+export interface AddProductPayload {
+  name: string;
+  store_id: string;
+  store_name?: string;
+  price: number;
+  currency?: string;
+  brand?: string;
+  category?: string;
+  size_hint?: string;
+  image_url?: string;
+  url?: string;
+}
+
+export interface AddProductResponse {
+  message: string;
+  product_id: string;
+  store_id: string;
+}
+
+export async function addProduct(payload: AddProductPayload): Promise<AddProductResponse> {
+  return request<AddProductResponse>('/products', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}

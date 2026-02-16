@@ -18,8 +18,10 @@ import { ButtonSize, CardShadow, FontSize, Radius, Spacing } from '@/constants/T
 import { useColorScheme } from '@/hooks/useColorScheme';
 import {
   type Product,
+  type Store,
   getAllProducts,
   getCategories,
+  getStores,
   searchProducts,
 } from '@/services/api';
 import { addToList } from '@/services/shoppingList';
@@ -29,7 +31,9 @@ export default function SearchScreen() {
   const [query, setQuery] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [activeStore, setActiveStore] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const colorScheme = useColorScheme() ?? 'light';
@@ -38,15 +42,17 @@ export default function SearchScreen() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchProducts = useCallback(
-    async (searchQuery: string, category?: string | null) => {
+    async (searchQuery: string, category?: string | null, storeId?: string | null) => {
       setLoading(true);
       setError(null);
       try {
         let results: Product[];
-        if (searchQuery.trim()) {
-          results = await searchProducts(searchQuery);
-        } else if (category) {
-          results = await searchProducts('', { category });
+        const filters: { category?: string; store_id?: string } = {};
+        if (category) filters.category = category;
+        if (storeId) filters.store_id = storeId;
+
+        if (searchQuery.trim() || Object.keys(filters).length > 0) {
+          results = await searchProducts(searchQuery, filters);
         } else {
           results = await getAllProducts();
         }
@@ -65,6 +71,9 @@ export default function SearchScreen() {
     getCategories()
       .then(setCategories)
       .catch(() => {});
+    getStores()
+      .then(setStores)
+      .catch(() => {});
   }, [fetchProducts]);
 
   const handleSearch = (text: string) => {
@@ -74,7 +83,7 @@ export default function SearchScreen() {
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(
-      () => fetchProducts(text, text.trim() ? null : activeCategory),
+      () => fetchProducts(text, text.trim() ? null : activeCategory, activeStore),
       400,
     );
   };
@@ -83,7 +92,13 @@ export default function SearchScreen() {
     const next = activeCategory === category ? null : category;
     setActiveCategory(next);
     setQuery('');
-    fetchProducts('', next);
+    fetchProducts('', next, activeStore);
+  };
+
+  const handleStorePress = (storeId: string) => {
+    const next = activeStore === storeId ? null : storeId;
+    setActiveStore(next);
+    fetchProducts(query, activeCategory, next);
   };
 
   const handleQuickAdd = async (item: Product) => {
@@ -207,6 +222,39 @@ export default function SearchScreen() {
             ))}
           </ScrollView>
         )}
+        {stores.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.chipRow}
+            contentContainerStyle={styles.chipContent}
+          >
+            {stores.map((store) => (
+              <Pressable
+                key={store.store_id}
+                style={[
+                  styles.chip,
+                  activeStore === store.store_id
+                    ? { backgroundColor: colors.success }
+                    : { backgroundColor: colors.backgroundSecondary },
+                ]}
+                onPress={() => handleStorePress(store.store_id)}
+                accessibilityRole="button"
+                accessibilityLabel={`Filter by ${store.store_name}`}
+                accessibilityState={{ selected: activeStore === store.store_id }}
+              >
+                <ThemedText
+                  style={[
+                    styles.chipText,
+                    activeStore === store.store_id && styles.chipTextActive,
+                  ]}
+                >
+                  {store.store_name}
+                </ThemedText>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
       </View>
 
       {loading && products.length === 0 ? (
@@ -217,7 +265,7 @@ export default function SearchScreen() {
         <View style={styles.centered}>
           <ThemedText style={[styles.errorText, { color: colors.error }]}>{error}</ThemedText>
           <Pressable
-            onPress={() => fetchProducts(query, activeCategory)}
+            onPress={() => fetchProducts(query, activeCategory, activeStore)}
             style={[styles.retryButton, { backgroundColor: colors.tint }]}
             accessibilityRole="button"
             accessibilityLabel="Retry loading products"
@@ -234,7 +282,7 @@ export default function SearchScreen() {
           ListEmptyComponent={
             <View style={styles.centered}>
               <ThemedText style={[styles.emptyText, { color: colors.textSecondary }]}>
-                {query || activeCategory
+                {query || activeCategory || activeStore
                   ? 'No products found'
                   : 'No products available'}
               </ThemedText>
@@ -242,6 +290,16 @@ export default function SearchScreen() {
           }
         />
       )}
+
+      <Pressable
+        style={[styles.fab, { backgroundColor: colors.success }]}
+        onPress={() => router.push('/add-product')}
+        accessibilityRole="button"
+        accessibilityLabel="Add product or price"
+      >
+        <ThemedText style={styles.fabPlus}>+</ThemedText>
+        <ThemedText style={styles.fabText}>Add</ThemedText>
+      </Pressable>
     </ThemedView>
   );
 }
@@ -287,6 +345,7 @@ const styles = StyleSheet.create({
   list: {
     padding: Spacing.lg,
     gap: Spacing.md,
+    paddingBottom: 152,
   },
   card: {
     flexDirection: 'row',
@@ -365,5 +424,32 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: FontSize.md,
+  },
+  fab: {
+    position: 'absolute',
+    right: Spacing.lg,
+    bottom: 92,
+    height: 52,
+    borderRadius: 26,
+    paddingHorizontal: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  fabPlus: {
+    color: '#fff',
+    fontSize: FontSize.xl,
+    fontWeight: '700',
+    lineHeight: 24,
+  },
+  fabText: {
+    color: '#fff',
+    fontSize: FontSize.sm,
+    fontWeight: '700',
   },
 });
