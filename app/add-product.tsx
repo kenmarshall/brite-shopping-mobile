@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -39,6 +40,27 @@ export default function AddProductScreen() {
   const [sizeHint, setSizeHint] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [url, setUrl] = useState('');
+
+  const showCaptureShell = (mode: 'barcode' | 'photo' | 'receipt') => {
+    if (mode === 'barcode') {
+      Alert.alert(
+        'Barcode Scanner (Coming Soon)',
+        'Camera barcode scan will auto-fill product name, size, and likely brand. For now, enter details manually below.',
+      );
+      return;
+    }
+    if (mode === 'photo') {
+      Alert.alert(
+        'Product Photo (Coming Soon)',
+        'Product photo parsing will suggest name/brand/category from image AI. For now, use the manual form fields.',
+      );
+      return;
+    }
+    Alert.alert(
+      'Receipt Scan (Coming Soon)',
+      'Receipt capture will extract multiple items and prices in one step. For now, add one item manually below.',
+    );
+  };
 
   useEffect(() => {
     setLoadingStores(true);
@@ -168,6 +190,42 @@ export default function AddProductScreen() {
               <ThemedText style={[styles.feedbackText, { color: colors.success }]}>{success}</ThemedText>
             </View>
           )}
+
+          <View style={styles.section}>
+            <ThemedText style={styles.label}>Quick Capture (Shells)</ThemedText>
+            <ThemedText style={[styles.helperText, { color: colors.textSecondary }]}>
+              Camera-based capture flows are scaffolded next.
+            </ThemedText>
+            <View style={styles.captureRow}>
+              <Pressable
+                style={[styles.captureButton, { backgroundColor: colors.backgroundSecondary }]}
+                onPress={() => showCaptureShell('barcode')}
+                accessibilityRole="button"
+                accessibilityLabel="Scan barcode"
+              >
+                <ThemedText style={styles.captureIcon}>#</ThemedText>
+                <ThemedText style={[styles.captureLabel, { color: colors.text }]}>Scan Barcode</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.captureButton, { backgroundColor: colors.backgroundSecondary }]}
+                onPress={() => showCaptureShell('photo')}
+                accessibilityRole="button"
+                accessibilityLabel="Take product photo"
+              >
+                <ThemedText style={styles.captureIcon}>@</ThemedText>
+                <ThemedText style={[styles.captureLabel, { color: colors.text }]}>Product Photo</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[styles.captureButton, { backgroundColor: colors.backgroundSecondary }]}
+                onPress={() => showCaptureShell('receipt')}
+                accessibilityRole="button"
+                accessibilityLabel="Scan receipt photo"
+              >
+                <ThemedText style={styles.captureIcon}>%</ThemedText>
+                <ThemedText style={[styles.captureLabel, { color: colors.text }]}>Scan Receipt</ThemedText>
+              </Pressable>
+            </View>
+          </View>
 
           <View style={styles.section}>
             <ThemedText style={styles.label}>Quick Store Select</ThemedText>
@@ -438,6 +496,29 @@ const styles = StyleSheet.create({
   },
   loadingStoresText: {
     fontSize: FontSize.sm,
+  },
+  captureRow: {
+    marginTop: Spacing.sm,
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  captureButton: {
+    flex: 1,
+    minHeight: 84,
+    borderRadius: Radius.sm,
+    padding: Spacing.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  captureIcon: {
+    fontSize: FontSize.lg,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  captureLabel: {
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   storeChipRow: {
     gap: Spacing.sm,
