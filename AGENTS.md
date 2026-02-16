@@ -1,4 +1,4 @@
-<!-- SYNC: When updating this file, also update AGENTS.md with the same changes (and vice versa). -->
+<!-- SYNC: When updating this file, also update CLAUDE.md with the same changes (and vice versa). -->
 # Brite Shopping Mobile
 
 React Native (Expo) mobile app for the Brite Shopping ecosystem — a price comparison platform for Jamaican shoppers.
