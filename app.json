@@ -16,6 +16,7 @@
       }
     },
     "android": {
+      "package": "com.kenmarshall.briteshopping",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
