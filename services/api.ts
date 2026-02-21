@@ -1,5 +1,9 @@
 const API_BASE_URL = 'https://brite-shopping-api.onrender.com';
 
+// App-level API key — blocks casual unauthorized access.
+// Set via EXPO_PUBLIC_API_KEY env var or defaults to empty (no enforcement in dev).
+const API_KEY = process.env.EXPO_PUBLIC_API_KEY ?? '';
+
 export interface LocationPrice {
   location_id: string;
   store_name: string | null;
@@ -14,7 +18,7 @@ export interface Product {
   normalized_name: string;
   brand: string | null;
   category: string | null;
-  size: { value: number | null; unit: string | null };
+  size: { value: number | null; unit: string | null; pack_count?: number | null };
   tags: string[];
   estimated_price: number | null;
   location_prices: LocationPrice[];
@@ -33,8 +37,12 @@ export interface SearchParams {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(API_KEY ? { 'X-API-Key': API_KEY } : {}),
+  };
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     ...options,
   });
   if (!response.ok) {
@@ -116,5 +124,41 @@ export async function addProduct(payload: AddProductPayload): Promise<AddProduct
   return request<AddProductResponse>('/products', {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+}
+
+// ---------- Device Profiles ----------
+
+export interface DeviceProfile {
+  device_id: string;
+  platform: string;
+  created_at: string;
+}
+
+export async function registerDevice(deviceId: string, platform: string): Promise<DeviceProfile> {
+  return request<DeviceProfile>('/devices', {
+    method: 'POST',
+    body: JSON.stringify({ device_id: deviceId, platform }),
+  });
+}
+
+export interface ShoppingListSyncItem {
+  productId: string;
+  name: string;
+  estimatedPrice: number | null;
+  imageUrl: string | null;
+  quantity: number;
+  addedAt: string;
+}
+
+export async function getRemoteShoppingList(deviceId: string): Promise<ShoppingListSyncItem[]> {
+  const res = await request<{ shopping_list: ShoppingListSyncItem[] }>(`/devices/${deviceId}/shopping-list`);
+  return res.shopping_list;
+}
+
+export async function syncShoppingList(deviceId: string, list: ShoppingListSyncItem[]): Promise<void> {
+  await request<{ message: string }>(`/devices/${deviceId}/shopping-list`, {
+    method: 'PUT',
+    body: JSON.stringify({ shopping_list: list }),
   });
 }

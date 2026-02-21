@@ -16,7 +16,7 @@ import { CardShadow, FontSize, Radius, Spacing } from '@/constants/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { type Product, getProduct } from '@/services/api';
 import { addToList, isInList } from '@/services/shoppingList';
-import { formatPrice } from '@/utils/format';
+import { formatMeasure, formatPackInfo, formatPrice, formatProductSize } from '@/utils/format';
 
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -82,6 +82,9 @@ export default function ProductDetailScreen() {
 
   const sortedPrices = [...product.location_prices].sort((a, b) => a.amount - b.amount);
   const lowestPrice = sortedPrices.length > 0 ? sortedPrices[0].amount : null;
+  const sizeLabel = formatProductSize(product.size);
+  const packLabel = formatPackInfo(product.size);
+  const measureLabel = formatMeasure(product.size);
 
   return (
     <ThemedView style={styles.container}>
@@ -115,10 +118,21 @@ export default function ProductDetailScreen() {
         <View style={styles.details}>
           <ThemedText type="title" style={styles.name}>{product.name}</ThemedText>
 
-          {product.size.value && (
-            <ThemedText style={[styles.size, { color: colors.textSecondary }]}>
-              {product.size.value} {product.size.unit}
-            </ThemedText>
+          {(packLabel || measureLabel) && (
+            <View style={styles.sizeRow}>
+              {packLabel && (
+                <View style={[styles.packBadge, { backgroundColor: colors.tint + '18' }]}>
+                  <ThemedText style={[styles.packBadgeText, { color: colors.tint }]}>
+                    {packLabel}
+                  </ThemedText>
+                </View>
+              )}
+              {measureLabel && (
+                <ThemedText style={[styles.size, { color: colors.textSecondary }]}>
+                  {measureLabel}
+                </ThemedText>
+              )}
+            </View>
           )}
 
           {product.category && (
@@ -261,9 +275,23 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     marginBottom: Spacing.xs,
   },
+  sizeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: Spacing.sm,
+  },
+  packBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.sm,
+  },
+  packBadgeText: {
+    fontSize: FontSize.sm,
+    fontWeight: '600',
+  },
   size: {
     fontSize: FontSize.sm,
-    marginBottom: Spacing.sm,
   },
   categoryBadge: {
     alignSelf: 'flex-start',

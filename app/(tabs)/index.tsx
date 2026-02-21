@@ -25,7 +25,7 @@ import {
   searchProducts,
 } from '@/services/api';
 import { addToList } from '@/services/shoppingList';
-import { formatPrice, formatStoreCount } from '@/utils/format';
+import { formatMeasure, formatPackInfo, formatPrice, formatProductSize, formatStoreCount } from '@/utils/format';
 
 export default function SearchScreen() {
   const [query, setQuery] = useState('');
@@ -110,15 +110,19 @@ export default function SearchScreen() {
     });
   };
 
-  const renderProduct = ({ item }: { item: Product }) => (
-    <Pressable
-      style={[styles.card, { backgroundColor: colors.card }]}
-      onPress={() =>
-        router.push({ pathname: '/product/[id]', params: { id: item._id } })
-      }
-      accessibilityRole="button"
-      accessibilityLabel={`${item.name}, ${formatPrice(item.estimated_price)}`}
-    >
+  const renderProduct = ({ item }: { item: Product }) => {
+    const sizeLabel = formatProductSize(item.size);
+    const packLabel = formatPackInfo(item.size);
+    const measureLabel = formatMeasure(item.size);
+    return (
+      <Pressable
+        style={[styles.card, { backgroundColor: colors.card }]}
+        onPress={() =>
+          router.push({ pathname: '/product/[id]', params: { id: item._id } })
+        }
+        accessibilityRole="button"
+        accessibilityLabel={`${item.name}${sizeLabel ? `, size ${sizeLabel}` : ''}, ${formatPrice(item.estimated_price)}`}
+      >
       {item.image_url && !item.image_url.startsWith('data:image/svg') ? (
         <Image
           source={{ uri: item.image_url }}
@@ -141,6 +145,20 @@ export default function SearchScreen() {
             {item.category}
           </ThemedText>
         )}
+        <View style={styles.sizeRow}>
+          {packLabel && (
+            <View style={[styles.packBadge, { backgroundColor: colors.tint + '18' }]}>
+              <ThemedText style={[styles.packBadgeText, { color: colors.tint }]}>
+                {packLabel}
+              </ThemedText>
+            </View>
+          )}
+          {measureLabel && (
+            <ThemedText style={[styles.sizeLabel, { color: colors.textSecondary }]}>
+              {measureLabel}
+            </ThemedText>
+          )}
+        </View>
         <View style={styles.priceRow}>
           <View>
             <ThemedText style={[styles.price, { color: colors.tint }]}>
@@ -164,8 +182,9 @@ export default function SearchScreen() {
           </Pressable>
         </View>
       </View>
-    </Pressable>
-  );
+      </Pressable>
+    );
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -291,15 +310,6 @@ export default function SearchScreen() {
         />
       )}
 
-      <Pressable
-        style={[styles.fab, { backgroundColor: colors.success }]}
-        onPress={() => router.push('/add-product')}
-        accessibilityRole="button"
-        accessibilityLabel="Add product or price"
-      >
-        <ThemedText style={styles.fabPlus}>+</ThemedText>
-        <ThemedText style={styles.fabText}>Add</ThemedText>
-      </Pressable>
     </ThemedView>
   );
 }
@@ -375,7 +385,26 @@ const styles = StyleSheet.create({
   },
   categoryLabel: {
     fontSize: FontSize.xs,
+    marginBottom: 2,
+  },
+  sizeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginBottom: Spacing.xs,
+  },
+  packBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Radius.sm,
+  },
+  packBadgeText: {
+    fontSize: FontSize.xs,
+    fontWeight: '600',
+  },
+  sizeLabel: {
+    fontSize: FontSize.xs,
+    fontWeight: '500',
   },
   priceRow: {
     flexDirection: 'row',
@@ -424,32 +453,5 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: FontSize.md,
-  },
-  fab: {
-    position: 'absolute',
-    right: Spacing.lg,
-    bottom: 92,
-    height: 52,
-    borderRadius: 26,
-    paddingHorizontal: Spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.22,
-    shadowRadius: 6,
-    elevation: 6,
-  },
-  fabPlus: {
-    color: '#fff',
-    fontSize: FontSize.xl,
-    fontWeight: '700',
-    lineHeight: 24,
-  },
-  fabText: {
-    color: '#fff',
-    fontSize: FontSize.sm,
-    fontWeight: '700',
   },
 });

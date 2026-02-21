@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
+import { registerDevice, syncShoppingList } from './api';
+
 const PROFILE_KEY = 'brite_profile_id';
 const STORAGE_KEY = 'brite_shopping_list';
 
@@ -23,11 +25,16 @@ export async function getProfileId(): Promise<string> {
   if (_profileId) return _profileId;
   try {
     let id = await AsyncStorage.getItem(PROFILE_KEY);
+    const isNew = !id;
     if (!id) {
       id = `${Platform.OS}-${generateUUID()}`;
       await AsyncStorage.setItem(PROFILE_KEY, id);
     }
     _profileId = id;
+    // Register with server on first creation (best-effort)
+    if (isNew) {
+      registerDevice(id, Platform.OS).catch(() => {});
+    }
     return id;
   } catch {
     _profileId = `temp-${generateUUID()}`;
@@ -77,6 +84,23 @@ async function _save(list: ShoppingList): Promise<void> {
   } catch {
     // List stays in memory cache even if persistence fails
   }
+  // Best-effort server sync — fire and forget, never block the UI
+  _syncToServer(list);
+}
+
+let _syncTimer: ReturnType<typeof setTimeout> | null = null;
+
+function _syncToServer(list: ShoppingList): void {
+  // Debounce syncs to avoid flooding the API
+  if (_syncTimer) clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(async () => {
+    try {
+      const deviceId = await getProfileId();
+      await syncShoppingList(deviceId, list);
+    } catch {
+      // Server sync is best-effort — local list is the source of truth
+    }
+  }, 2000);
 }
 
 export async function getShoppingList(): Promise<ShoppingList> {

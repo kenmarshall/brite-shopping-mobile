@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -22,7 +21,6 @@ import { addProduct, getStores, type Store } from '@/services/api';
 export default function AddProductScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
-  const router = useRouter();
 
   const [stores, setStores] = useState<Store[]>([]);
   const [loadingStores, setLoadingStores] = useState(true);
@@ -38,6 +36,7 @@ export default function AddProductScreen() {
   const [brand, setBrand] = useState('');
   const [category, setCategory] = useState('');
   const [sizeHint, setSizeHint] = useState('');
+  const [packQty, setPackQty] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [url, setUrl] = useState('');
 
@@ -112,6 +111,7 @@ export default function AddProductScreen() {
     setBrand('');
     setCategory('');
     setSizeHint('');
+    setPackQty('');
     setImageUrl('');
     setUrl('');
   };
@@ -126,6 +126,19 @@ export default function AddProductScreen() {
       return;
     }
 
+    // Combine pack qty and size into a single size_hint for the API
+    // e.g. packQty="6", sizeHint="330ml" → "6x330ml"
+    const trimmedSize = sizeHint.trim();
+    const trimmedPack = packQty.trim();
+    let combinedSizeHint: string | undefined;
+    if (trimmedPack && trimmedSize) {
+      combinedSizeHint = `${trimmedPack}x${trimmedSize}`;
+    } else if (trimmedPack) {
+      combinedSizeHint = `${trimmedPack} pack`;
+    } else if (trimmedSize) {
+      combinedSizeHint = trimmedSize;
+    }
+
     const payload = {
       name: name.trim(),
       store_id: storeId.trim().toLowerCase(),
@@ -134,7 +147,7 @@ export default function AddProductScreen() {
       currency: currency.trim().toUpperCase(),
       brand: brand.trim() || undefined,
       category: category.trim() || undefined,
-      size_hint: sizeHint.trim() || undefined,
+      size_hint: combinedSizeHint || undefined,
       image_url: imageUrl.trim() || undefined,
       url: url.trim() || undefined,
     };
@@ -161,17 +174,6 @@ export default function AddProductScreen() {
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
         >
-          <Pressable
-            onPress={() => router.back()}
-            style={styles.backNav}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-          >
-            <ThemedText style={[styles.backText, { color: colors.tint }]}>
-              {'<'} Back
-            </ThemedText>
-          </Pressable>
-
           <View style={styles.headerBlock}>
             <ThemedText type="title">Add Product / Price</ThemedText>
             <ThemedText style={[styles.subtitle, { color: colors.textSecondary }]}>
@@ -371,18 +373,33 @@ export default function AddProductScreen() {
             </View>
           </View>
 
-          <View style={styles.section}>
-            <ThemedText style={styles.label}>Size Hint</ThemedText>
-            <TextInput
-              value={sizeHint}
-              onChangeText={setSizeHint}
-              placeholder="e.g. 400ml, 2kg"
-              placeholderTextColor={colors.icon}
-              style={[styles.input, { backgroundColor: colors.backgroundSecondary, color: colors.text }]}
-              autoCapitalize="none"
-              autoCorrect={false}
-              accessibilityLabel="Size hint"
-            />
+          <View style={styles.row}>
+            <View style={styles.halfWidth}>
+              <ThemedText style={styles.label}>Size</ThemedText>
+              <TextInput
+                value={sizeHint}
+                onChangeText={setSizeHint}
+                placeholder="e.g. 400ml, 2kg"
+                placeholderTextColor={colors.icon}
+                style={[styles.input, { backgroundColor: colors.backgroundSecondary, color: colors.text }]}
+                autoCapitalize="none"
+                autoCorrect={false}
+                accessibilityLabel="Product size"
+              />
+            </View>
+            <View style={styles.packQtyBox}>
+              <ThemedText style={styles.label}>Pack Qty</ThemedText>
+              <TextInput
+                value={packQty}
+                onChangeText={setPackQty}
+                placeholder="1"
+                placeholderTextColor={colors.icon}
+                style={[styles.input, { backgroundColor: colors.backgroundSecondary, color: colors.text }]}
+                keyboardType="number-pad"
+                maxLength={4}
+                accessibilityLabel="Pack quantity"
+              />
+            </View>
           </View>
 
           <View style={styles.section}>
@@ -446,15 +463,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.xxl,
   },
-  backNav: {
-    paddingTop: Spacing.headerTop,
-    paddingBottom: Spacing.sm,
-  },
-  backText: {
-    fontSize: FontSize.md,
-    fontWeight: '600',
-  },
   headerBlock: {
+    paddingTop: Spacing.headerTop,
     marginBottom: Spacing.lg,
   },
   subtitle: {
@@ -474,6 +484,9 @@ const styles = StyleSheet.create({
   },
   currencyBox: {
     width: 104,
+  },
+  packQtyBox: {
+    width: 90,
   },
   label: {
     marginBottom: Spacing.xs,
