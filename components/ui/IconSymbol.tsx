@@ -22,6 +22,12 @@ const MAPPING = {
   'list.bullet': 'list',
   'plus.circle.fill': 'add-circle',
   'person.circle': 'account-circle',
+  'line.3.horizontal.decrease': 'filter-list',
+  'photo': 'image',
+  'barcode.viewfinder': 'qr-code-scanner',
+  'xmark': 'close',
+  'flashlight.on.fill': 'flash-on',
+  'flashlight.off.fill': 'flash-off',
 } as IconMapping;
 
 /**

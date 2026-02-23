@@ -1,8 +1,11 @@
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -11,22 +14,42 @@ import {
   View,
 } from 'react-native';
 
+import BarcodeScanner from '@/components/BarcodeScanner';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { ButtonSize, FontSize, Radius, Spacing } from '@/constants/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { addProduct, getStores, type Store } from '@/services/api';
+import {
+  addProduct,
+  getStores,
+  linkBarcode,
+  lookupBarcode,
+  lookupOpenFoodFacts,
+  type Store,
+} from '@/services/api';
 
 export default function AddProductScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
+  const tabBarHeight = useBottomTabBarHeight();
+  const router = useRouter();
+  const params = useLocalSearchParams<{
+    prefill_name?: string;
+    prefill_brand?: string;
+    prefill_category?: string;
+    prefill_image_url?: string;
+    prefill_barcode?: string;
+  }>();
 
   const [stores, setStores] = useState<Store[]>([]);
   const [loadingStores, setLoadingStores] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [scannerVisible, setScannerVisible] = useState(false);
+  const [scannedBarcode, setScannedBarcode] = useState('');
 
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
@@ -40,12 +63,45 @@ export default function AddProductScreen() {
   const [imageUrl, setImageUrl] = useState('');
   const [url, setUrl] = useState('');
 
+  // Apply prefill params from barcode scan result
+  useEffect(() => {
+    if (params.prefill_name) setName(params.prefill_name);
+    if (params.prefill_brand) setBrand(params.prefill_brand);
+    if (params.prefill_category) setCategory(params.prefill_category);
+    if (params.prefill_image_url) setImageUrl(params.prefill_image_url);
+    if (params.prefill_barcode) setScannedBarcode(params.prefill_barcode);
+  }, [params.prefill_name, params.prefill_brand, params.prefill_category, params.prefill_image_url, params.prefill_barcode]);
+
+  const handleBarcodeScan = async (barcodeValue: string) => {
+    setScannerVisible(false);
+    setScannedBarcode(barcodeValue);
+
+    // Run waterfall lookup
+    try {
+      const result = await lookupBarcode(barcodeValue);
+      if (result.found && result.product) {
+        router.push({ pathname: '/product/[id]', params: { id: result.product._id } });
+        return;
+      }
+    } catch { /* continue */ }
+
+    try {
+      const offProduct = await lookupOpenFoodFacts(barcodeValue);
+      if (offProduct?.product_name) {
+        setName(offProduct.product_name);
+        if (offProduct.brands) setBrand(offProduct.brands);
+        if (offProduct.categories) setCategory(offProduct.categories.split(',')[0]?.trim() || '');
+        if (offProduct.image_url) setImageUrl(offProduct.image_url);
+        return;
+      }
+    } catch { /* continue */ }
+
+    // Not found anywhere — barcode stored for later linking
+  };
+
   const showCaptureShell = (mode: 'barcode' | 'photo' | 'receipt') => {
     if (mode === 'barcode') {
-      Alert.alert(
-        'Barcode Scanner (Coming Soon)',
-        'Camera barcode scan will auto-fill product name, size, and likely brand. For now, enter details manually below.',
-      );
+      setScannerVisible(true);
       return;
     }
     if (mode === 'photo') {
@@ -114,6 +170,7 @@ export default function AddProductScreen() {
     setPackQty('');
     setImageUrl('');
     setUrl('');
+    setScannedBarcode('');
   };
 
   const submit = async () => {
@@ -155,6 +212,14 @@ export default function AddProductScreen() {
     setSubmitting(true);
     try {
       const response = await addProduct(payload);
+      // Link barcode to the newly created product if we have one
+      if (scannedBarcode && response.product_id) {
+        try {
+          await linkBarcode(scannedBarcode, response.product_id);
+        } catch {
+          // Non-critical — product was saved, barcode linking is best-effort
+        }
+      }
       setSuccess(response.message || 'Product saved successfully.');
       clearForm();
     } catch (err: any) {
@@ -171,7 +236,7 @@ export default function AddProductScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[styles.scroll, { paddingBottom: tabBarHeight + Spacing.xl }]}
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.headerBlock}>
@@ -205,7 +270,7 @@ export default function AddProductScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Scan barcode"
               >
-                <ThemedText style={styles.captureIcon}>#</ThemedText>
+                <IconSymbol name="barcode.viewfinder" size={24} color={colors.tint} />
                 <ThemedText style={[styles.captureLabel, { color: colors.text }]}>Scan Barcode</ThemedText>
               </Pressable>
               <Pressable
@@ -228,6 +293,18 @@ export default function AddProductScreen() {
               </Pressable>
             </View>
           </View>
+
+          {scannedBarcode ? (
+            <View style={[styles.barcodeDisplay, { backgroundColor: colors.tint + '12', borderColor: colors.tint + '30' }]}>
+              <IconSymbol name="barcode.viewfinder" size={16} color={colors.tint} />
+              <ThemedText style={[styles.barcodeText, { color: colors.tint }]}>
+                {scannedBarcode}
+              </ThemedText>
+              <Pressable onPress={() => setScannedBarcode('')} hitSlop={8}>
+                <IconSymbol name="xmark" size={14} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+          ) : null}
 
           <View style={styles.section}>
             <ThemedText style={styles.label}>Quick Store Select</ThemedText>
@@ -448,9 +525,15 @@ export default function AddProductScreen() {
             )}
           </Pressable>
 
-          <View style={styles.bottomSpacer} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <Modal visible={scannerVisible} animationType="slide" presentationStyle="fullScreen">
+        <BarcodeScanner
+          onScanned={(barcodeValue) => handleBarcodeScan(barcodeValue)}
+          onClose={() => setScannerVisible(false)}
+        />
+      </Modal>
     </ThemedView>
   );
 }
@@ -461,7 +544,6 @@ const styles = StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.xxl,
   },
   headerBlock: {
     paddingTop: Spacing.headerTop,
@@ -509,6 +591,22 @@ const styles = StyleSheet.create({
   },
   loadingStoresText: {
     fontSize: FontSize.sm,
+  },
+  barcodeDisplay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+  },
+  barcodeText: {
+    flex: 1,
+    fontSize: FontSize.sm,
+    fontFamily: 'SpaceMono',
+    fontWeight: '600',
   },
   captureRow: {
     marginTop: Spacing.sm,
@@ -570,8 +668,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: FontSize.md,
     fontWeight: '700',
-  },
-  bottomSpacer: {
-    height: Spacing.xl,
   },
 });

@@ -1,17 +1,19 @@
 import Constants from 'expo-constants';
 import { useEffect, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { Colors } from '@/constants/Colors';
 import { FontSize, Radius, Spacing } from '@/constants/Theme';
+import { ThemePreference, useThemePreference } from '@/contexts/ThemeContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { getProfileId } from '@/services/shoppingList';
 
 export default function ProfileScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
+  const { preference, setPreference } = useThemePreference();
   const [deviceId, setDeviceId] = useState<string>('');
 
   useEffect(() => {
@@ -56,9 +58,39 @@ export default function ProfileScreen() {
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.card }]}>
+          <ThemedText style={styles.cardTitle}>Settings</ThemedText>
+
+          <View style={styles.row}>
+            <ThemedText style={[styles.label, { color: colors.textSecondary }]}>Appearance</ThemedText>
+            <View style={[styles.segmented, { backgroundColor: colors.background }]}>
+              {(['light', 'dark', 'system'] as ThemePreference[]).map((option) => (
+                <Pressable
+                  key={option}
+                  onPress={() => setPreference(option)}
+                  style={[
+                    styles.segment,
+                    preference === option && [styles.segmentActive, { backgroundColor: colors.card }],
+                  ]}
+                >
+                  <ThemedText
+                    style={[
+                      styles.segmentText,
+                      { color: colors.textSecondary },
+                      preference === option && { color: colors.text, fontWeight: '600' },
+                    ]}
+                  >
+                    {option.charAt(0).toUpperCase() + option.slice(1)}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        <View style={[styles.card, { backgroundColor: colors.card }]}>
           <ThemedText style={styles.cardTitle}>About</ThemedText>
           <ThemedText style={[styles.placeholder, { color: colors.textSecondary }]}>
-            Brite Shopping helps Jamaican shoppers find products, compare prices across stores, and shop economically.
+            Brite Shopping helps you find products, compare prices across stores, and shop economically.
           </ThemedText>
         </View>
       </View>
@@ -115,5 +147,26 @@ const styles = StyleSheet.create({
   placeholder: {
     fontSize: FontSize.sm,
     lineHeight: 20,
+  },
+  segmented: {
+    flexDirection: 'row',
+    borderRadius: Radius.sm,
+    padding: 2,
+  },
+  segment: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 6,
+    borderRadius: Radius.sm - 1,
+  },
+  segmentActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  segmentText: {
+    fontSize: FontSize.xs,
+    fontWeight: '500',
   },
 });

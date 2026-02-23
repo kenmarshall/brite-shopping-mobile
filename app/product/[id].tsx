@@ -153,11 +153,22 @@ export default function ProductDetailScreen() {
             </View>
           )}
 
-          <View style={[styles.estimatedPriceBox, { backgroundColor: colors.tint }]}>
-            <ThemedText style={styles.estimatedLabel}>Estimated Price</ThemedText>
-            <ThemedText style={styles.estimatedPrice}>
-              {formatPrice(product.estimated_price)}
-            </ThemedText>
+          <View style={[styles.estimatedPriceRow, { borderColor: colors.border }]}>
+            <View>
+              <ThemedText style={[styles.estimatedLabel, { color: colors.textSecondary }]}>
+                Estimated Price
+              </ThemedText>
+              <ThemedText style={[styles.estimatedPrice, { color: colors.tint }]}>
+                {formatPrice(product.estimated_price)}
+              </ThemedText>
+            </View>
+            {sortedPrices.length > 1 && (
+              <View style={[styles.savingsBadge, { backgroundColor: colors.success + '15' }]}>
+                <ThemedText style={[styles.savingsText, { color: colors.success }]}>
+                  {sortedPrices.length} stores
+                </ThemedText>
+              </View>
+            )}
           </View>
 
           <Pressable
@@ -319,23 +330,34 @@ const styles = StyleSheet.create({
   tagText: {
     fontSize: FontSize.xs,
   },
-  estimatedPriceBox: {
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.xl,
-    marginBottom: Spacing.xl,
+  estimatedPriceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: Spacing.md,
+    marginBottom: Spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   estimatedLabel: {
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: FontSize.sm,
-    marginBottom: 6,
+    fontSize: FontSize.xs,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
   },
   estimatedPrice: {
-    color: '#fff',
-    fontSize: FontSize.hero,
+    fontSize: FontSize.xxl,
     fontWeight: '700',
-    lineHeight: 34,
+  },
+  savingsBadge: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: Radius.pill,
+  },
+  savingsText: {
+    fontSize: FontSize.xs,
+    fontWeight: '600',
   },
   addToListButton: {
     borderRadius: Radius.sm,

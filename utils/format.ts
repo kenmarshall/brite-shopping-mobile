@@ -1,7 +1,13 @@
+function commaFormat(value: number): string {
+  const [whole, decimal] = value.toFixed(2).split('.');
+  const withCommas = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${withCommas}.${decimal}`;
+}
+
 export function formatPrice(amount: number | null | undefined, currency = 'JMD'): string {
   if (amount == null) return 'Price unavailable';
-  if (currency === 'USD') return `US$${amount.toFixed(2)}`;
-  return `$${amount.toFixed(2)}`;
+  if (currency === 'USD') return `US$${commaFormat(amount)}`;
+  return `$${commaFormat(amount)}`;
 }
 
 export function formatStoreCount(count: number): string {
@@ -53,14 +59,19 @@ export function formatPackInfo(size: ProductSizeValue | null | undefined): strin
   return null;
 }
 
+// Units that describe quantity/packaging rather than physical measurement
+const PACK_UNITS = new Set(['count', 'ct', 'pk', 'pack', 'packs', 'piece', 'pieces', 'pcs', 'ea', 'each', 'unit', 'units', 's']);
+
 /** Returns just the measure portion, e.g. "330ml", or null if no size data. */
 export function formatMeasure(size: ProductSizeValue | null | undefined): string | null {
   if (!size) return null;
   const hasValue = size.value != null;
-  const unit = (size.unit || '').trim();
-  const hasUnit = unit.length > 0;
+  const rawUnit = (size.unit || '').trim();
+  const hasUnit = rawUnit.length > 0;
+  // Skip count/pack units — the pack badge already covers those
+  if (hasUnit && PACK_UNITS.has(rawUnit.toLowerCase())) return null;
   if (hasValue && hasUnit) {
-    return `${compactNumber(size.value!)}${unit}`;
+    return `${compactNumber(size.value!)}${rawUnit}`;
   }
   if (hasValue) {
     return compactNumber(size.value!);

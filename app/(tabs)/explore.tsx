@@ -1,3 +1,4 @@
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -11,6 +12,7 @@ import {
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { ButtonSize, CardShadow, FontSize, Radius, Spacing } from '@/constants/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -30,6 +32,7 @@ export default function ShoppingListScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const router = useRouter();
+  const tabBarHeight = useBottomTabBarHeight();
 
   const loadList = useCallback(async () => {
     const items = await getShoppingList();
@@ -87,21 +90,24 @@ export default function ShoppingListScreen() {
       accessibilityRole="button"
       accessibilityLabel={`${item.name}, ${formatPrice(item.estimatedPrice)}, quantity ${item.quantity}`}
     >
-      {item.imageUrl && !item.imageUrl.startsWith('data:image/svg') ? (
-        <Image source={{ uri: item.imageUrl }} style={styles.itemImage} contentFit="cover" />
-      ) : (
-        <View style={[styles.itemImage, { backgroundColor: colors.placeholder }]}>
-          <ThemedText style={{ fontSize: FontSize.xs, color: colors.placeholderText }}>
-            No Image
-          </ThemedText>
-        </View>
-      )}
+      <View style={[styles.imageContainer, { backgroundColor: colors.placeholder }]}>
+        {item.imageUrl && !item.imageUrl.startsWith('data:image/svg') ? (
+          <Image source={{ uri: item.imageUrl }} style={styles.itemImage} contentFit="cover" />
+        ) : (
+          <IconSymbol name="photo" size={22} color={colors.placeholderText} />
+        )}
+      </View>
       <View style={styles.itemContent}>
-        <ThemedText style={styles.itemName} numberOfLines={2}>{item.name}</ThemedText>
-        <ThemedText style={[styles.itemPrice, { color: colors.tint }]}>
+        <ThemedText style={styles.itemName} numberOfLines={1}>{item.name}</ThemedText>
+        <ThemedText style={[styles.itemUnitPrice, { color: colors.textSecondary }]}>
           {formatPrice(item.estimatedPrice)}
           {item.quantity > 1 ? ` x ${item.quantity}` : ''}
         </ThemedText>
+        {item.quantity > 1 && (
+          <ThemedText style={[styles.itemLineTotal, { color: colors.tint }]}>
+            {formatPrice((item.estimatedPrice ?? 0) * item.quantity)}
+          </ThemedText>
+        )}
       </View>
       <View style={styles.quantityControls}>
         <Pressable
@@ -156,12 +162,13 @@ export default function ShoppingListScreen() {
             data={list}
             renderItem={renderItem}
             keyExtractor={(item) => item.productId}
-            contentContainerStyle={styles.list}
+            style={{ backgroundColor: colors.backgroundSecondary }}
+            contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + 80 }]}
           />
           <View
             style={[
               styles.totalBar,
-              { backgroundColor: colors.card, borderTopColor: colors.border },
+              { backgroundColor: colors.card, borderTopColor: colors.border, bottom: tabBarHeight },
             ]}
           >
             <View>
@@ -169,7 +176,7 @@ export default function ShoppingListScreen() {
                 Estimated Total ({itemCount} item{itemCount !== 1 ? 's' : ''})
               </ThemedText>
               <ThemedText style={[styles.totalAmount, { color: colors.tint }]}>
-                ${total.toFixed(2)}
+                {formatPrice(total)}
               </ThemedText>
             </View>
           </View>
@@ -221,42 +228,48 @@ const styles = StyleSheet.create({
   list: {
     padding: Spacing.lg,
     gap: Spacing.md,
-    paddingBottom: 100,
   },
   card: {
     flexDirection: 'row',
     borderRadius: Radius.md,
     overflow: 'hidden',
+    padding: Spacing.md,
     ...CardShadow,
+    alignItems: 'center',
+  },
+  imageContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: Radius.sm,
+    overflow: 'hidden',
+    justifyContent: 'center',
     alignItems: 'center',
   },
   itemImage: {
     width: 70,
     height: 70,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   itemContent: {
     flex: 1,
-    padding: Spacing.md,
+    paddingHorizontal: Spacing.md,
   },
   itemName: {
     fontSize: FontSize.md,
     fontWeight: '600',
     marginBottom: 2,
   },
-  itemBrand: {
+  itemUnitPrice: {
     fontSize: FontSize.sm,
-    marginBottom: 2,
+    fontWeight: '500',
   },
-  itemPrice: {
+  itemLineTotal: {
     fontSize: FontSize.md,
     fontWeight: '700',
+    marginTop: 2,
   },
   quantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingRight: Spacing.md,
     gap: Spacing.sm,
   },
   qtyButton: {
@@ -280,11 +293,9 @@ const styles = StyleSheet.create({
   },
   totalBar: {
     position: 'absolute',
-    bottom: 0,
     left: 0,
     right: 0,
     padding: Spacing.lg,
-    paddingBottom: 34,
     borderTopWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },

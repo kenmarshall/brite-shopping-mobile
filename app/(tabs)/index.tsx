@@ -4,15 +4,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  LayoutAnimation,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
+  UIManager,
+  Platform,
   View,
 } from 'react-native';
 
+import BarcodeScanner from '@/components/BarcodeScanner';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { ButtonSize, CardShadow, FontSize, Radius, Spacing } from '@/constants/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -25,7 +31,14 @@ import {
   searchProducts,
 } from '@/services/api';
 import { addToList } from '@/services/shoppingList';
-import { formatMeasure, formatPackInfo, formatPrice, formatProductSize, formatStoreCount } from '@/utils/format';
+import { formatMeasure, formatPackInfo, formatPrice, formatStoreCount } from '@/utils/format';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const CARD_HEIGHT = 108;
+const IMAGE_SIZE = CARD_HEIGHT;
 
 export default function SearchScreen() {
   const [query, setQuery] = useState('');
@@ -34,12 +47,16 @@ export default function SearchScreen() {
   const [stores, setStores] = useState<Store[]>([]);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [activeStore, setActiveStore] = useState<string | null>(null);
+  const [filtersVisible, setFiltersVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scannerVisible, setScannerVisible] = useState(false);
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const router = useRouter();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const hasActiveFilter = activeCategory !== null || activeStore !== null;
 
   const fetchProducts = useCallback(
     async (searchQuery: string, category?: string | null, storeId?: string | null) => {
@@ -101,6 +118,11 @@ export default function SearchScreen() {
     fetchProducts(query, activeCategory, next);
   };
 
+  const toggleFilters = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setFiltersVisible((v) => !v);
+  };
+
   const handleQuickAdd = async (item: Product) => {
     await addToList({
       productId: item._id,
@@ -111,7 +133,6 @@ export default function SearchScreen() {
   };
 
   const renderProduct = ({ item }: { item: Product }) => {
-    const sizeLabel = formatProductSize(item.size);
     const packLabel = formatPackInfo(item.size);
     const measureLabel = formatMeasure(item.size);
     return (
@@ -121,42 +142,38 @@ export default function SearchScreen() {
           router.push({ pathname: '/product/[id]', params: { id: item._id } })
         }
         accessibilityRole="button"
-        accessibilityLabel={`${item.name}${sizeLabel ? `, size ${sizeLabel}` : ''}, ${formatPrice(item.estimated_price)}`}
+        accessibilityLabel={`${item.name}${packLabel ? `, ${packLabel}` : ''}${measureLabel ? `, ${measureLabel}` : ''}, ${formatPrice(item.estimated_price)}`}
       >
-      {item.image_url && !item.image_url.startsWith('data:image/svg') ? (
-        <Image
-          source={{ uri: item.image_url }}
-          style={styles.productImage}
-          contentFit="cover"
-        />
-      ) : (
-        <View style={[styles.productImage, { backgroundColor: colors.placeholder }]}>
-          <ThemedText style={{ fontSize: FontSize.xs, color: colors.placeholderText }}>
-            No Image
-          </ThemedText>
-        </View>
-      )}
+      <View style={[styles.imageContainer, { backgroundColor: colors.placeholder }]}>
+        {item.image_url && !item.image_url.startsWith('data:image/svg') ? (
+          <Image
+            source={{ uri: item.image_url }}
+            style={styles.productImage}
+            contentFit="cover"
+          />
+        ) : (
+          <IconSymbol name="photo" size={28} color={colors.placeholderText} />
+        )}
+      </View>
       <View style={styles.cardContent}>
-        <ThemedText style={styles.productName} numberOfLines={2}>
+        <ThemedText style={styles.productName} numberOfLines={1}>
           {item.name}
         </ThemedText>
-        {item.category && (
-          <ThemedText style={[styles.categoryLabel, { color: colors.tint }]}>
-            {item.category}
-          </ThemedText>
-        )}
         <View style={styles.sizeRow}>
-          {packLabel && (
+          {packLabel ? (
             <View style={[styles.packBadge, { backgroundColor: colors.tint + '18' }]}>
               <ThemedText style={[styles.packBadgeText, { color: colors.tint }]}>
                 {packLabel}
               </ThemedText>
             </View>
-          )}
-          {measureLabel && (
+          ) : null}
+          {measureLabel ? (
             <ThemedText style={[styles.sizeLabel, { color: colors.textSecondary }]}>
               {measureLabel}
             </ThemedText>
+          ) : null}
+          {!packLabel && !measureLabel && (
+            <ThemedText style={[styles.sizeLabel, { color: 'transparent' }]}>{'\u00A0'}</ThemedText>
           )}
         </View>
         <View style={styles.priceRow}>
@@ -192,87 +209,122 @@ export default function SearchScreen() {
         <ThemedText type="title" style={styles.headerTitle}>
           Brite Shopping
         </ThemedText>
-        <TextInput
-          style={[
-            styles.searchInput,
-            {
-              backgroundColor: colors.backgroundSecondary,
-              color: colors.text,
-            },
-          ]}
-          placeholder="Search products, brands, categories..."
-          placeholderTextColor={colors.icon}
-          value={query}
-          onChangeText={handleSearch}
-          autoCapitalize="none"
-          autoCorrect={false}
-          accessibilityLabel="Search products"
-        />
-        {categories.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.chipRow}
-            contentContainerStyle={styles.chipContent}
+        <View style={styles.searchRow}>
+          <TextInput
+            style={[
+              styles.searchInput,
+              {
+                backgroundColor: colors.backgroundSecondary,
+                color: colors.text,
+              },
+            ]}
+            placeholder="Search products, brands, categories..."
+            placeholderTextColor={colors.icon}
+            value={query}
+            onChangeText={handleSearch}
+            autoCapitalize="none"
+            autoCorrect={false}
+            accessibilityLabel="Search products"
+          />
+          <Pressable
+            onPress={() => setScannerVisible(true)}
+            style={[styles.filterButton, { backgroundColor: colors.backgroundSecondary }]}
+            accessibilityRole="button"
+            accessibilityLabel="Scan barcode"
           >
-            {categories.map((cat) => (
-              <Pressable
-                key={cat}
-                style={[
-                  styles.chip,
-                  activeCategory === cat
-                    ? { backgroundColor: colors.tint }
-                    : { backgroundColor: colors.backgroundSecondary },
-                ]}
-                onPress={() => handleCategoryPress(cat)}
-                accessibilityRole="button"
-                accessibilityLabel={`Filter by ${cat}`}
-                accessibilityState={{ selected: activeCategory === cat }}
-              >
-                <ThemedText
-                  style={[
-                    styles.chipText,
-                    activeCategory === cat && styles.chipTextActive,
-                  ]}
-                >
-                  {cat}
-                </ThemedText>
-              </Pressable>
-            ))}
-          </ScrollView>
-        )}
-        {stores.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.chipRow}
-            contentContainerStyle={styles.chipContent}
+            <IconSymbol name="barcode.viewfinder" size={20} color={colors.icon} />
+          </Pressable>
+          <Pressable
+            onPress={toggleFilters}
+            style={[
+              styles.filterButton,
+              { backgroundColor: hasActiveFilter ? colors.tint : colors.backgroundSecondary },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Toggle filters"
+            accessibilityState={{ expanded: filtersVisible }}
           >
-            {stores.map((store) => (
-              <Pressable
-                key={store.store_id}
-                style={[
-                  styles.chip,
-                  activeStore === store.store_id
-                    ? { backgroundColor: colors.success }
-                    : { backgroundColor: colors.backgroundSecondary },
-                ]}
-                onPress={() => handleStorePress(store.store_id)}
-                accessibilityRole="button"
-                accessibilityLabel={`Filter by ${store.store_name}`}
-                accessibilityState={{ selected: activeStore === store.store_id }}
-              >
-                <ThemedText
-                  style={[
-                    styles.chipText,
-                    activeStore === store.store_id && styles.chipTextActive,
-                  ]}
+            <IconSymbol
+              name="line.3.horizontal.decrease"
+              size={20}
+              color={hasActiveFilter ? '#fff' : colors.icon}
+            />
+            {hasActiveFilter && <View style={styles.filterDot} />}
+          </Pressable>
+        </View>
+        {filtersVisible && (
+          <View style={styles.filterPanel}>
+            {categories.length > 0 && (
+              <View>
+                <ThemedText style={[styles.filterSectionLabel, { color: colors.textSecondary }]}>Category</ThemedText>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.chipContent}
                 >
-                  {store.store_name}
-                </ThemedText>
-              </Pressable>
-            ))}
-          </ScrollView>
+                  {categories.map((cat) => (
+                    <Pressable
+                      key={cat}
+                      style={[
+                        styles.chip,
+                        activeCategory === cat
+                          ? { backgroundColor: colors.tint }
+                          : { backgroundColor: colors.backgroundSecondary },
+                      ]}
+                      onPress={() => handleCategoryPress(cat)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Filter by ${cat}`}
+                      accessibilityState={{ selected: activeCategory === cat }}
+                    >
+                      <ThemedText
+                        style={[
+                          styles.chipText,
+                          activeCategory === cat && styles.chipTextActive,
+                        ]}
+                      >
+                        {cat}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+            {stores.length > 0 && (
+              <View>
+                <ThemedText style={[styles.filterSectionLabel, { color: colors.textSecondary }]}>Store</ThemedText>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.chipContent}
+                >
+                  {stores.map((store) => (
+                    <Pressable
+                      key={store.store_id}
+                      style={[
+                        styles.chip,
+                        activeStore === store.store_id
+                          ? { backgroundColor: colors.success }
+                          : { backgroundColor: colors.backgroundSecondary },
+                      ]}
+                      onPress={() => handleStorePress(store.store_id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Filter by ${store.store_name}`}
+                      accessibilityState={{ selected: activeStore === store.store_id }}
+                    >
+                      <ThemedText
+                        style={[
+                          styles.chipText,
+                          activeStore === store.store_id && styles.chipTextActive,
+                        ]}
+                      >
+                        {store.store_name}
+                      </ThemedText>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+          </View>
         )}
       </View>
 
@@ -297,6 +349,7 @@ export default function SearchScreen() {
           data={products}
           renderItem={renderProduct}
           keyExtractor={(item) => item._id}
+          style={{ backgroundColor: colors.backgroundSecondary }}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
             <View style={styles.centered}>
@@ -310,6 +363,15 @@ export default function SearchScreen() {
         />
       )}
 
+      <Modal visible={scannerVisible} animationType="slide" presentationStyle="fullScreen">
+        <BarcodeScanner
+          onScanned={(barcodeValue) => {
+            setScannerVisible(false);
+            router.push({ pathname: '/scan', params: { barcode: barcodeValue } });
+          }}
+          onClose={() => setScannerVisible(false)}
+        />
+      </Modal>
     </ThemedView>
   );
 }
@@ -326,15 +388,44 @@ const styles = StyleSheet.create({
   headerTitle: {
     marginBottom: Spacing.md,
   },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
   searchInput: {
+    flex: 1,
     height: ButtonSize.touch,
     borderRadius: Radius.sm,
     paddingHorizontal: Spacing.lg,
     fontSize: FontSize.md,
   },
-  chipRow: {
-    marginTop: Spacing.sm,
-    maxHeight: 36,
+  filterButton: {
+    width: ButtonSize.touch,
+    height: ButtonSize.touch,
+    borderRadius: Radius.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  filterDot: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#fff',
+  },
+  filterPanel: {
+    marginTop: Spacing.md,
+    gap: Spacing.sm,
+  },
+  filterSectionLabel: {
+    fontSize: FontSize.xs,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: Spacing.xs,
   },
   chipContent: {
     gap: Spacing.sm,
@@ -359,15 +450,23 @@ const styles = StyleSheet.create({
   },
   card: {
     flexDirection: 'row',
+    alignItems: 'center',
     borderRadius: Radius.md,
     overflow: 'hidden',
+    paddingLeft: Spacing.md,
     ...CardShadow,
   },
-  productImage: {
-    width: 100,
-    height: 100,
+  imageContainer: {
+    width: IMAGE_SIZE,
+    height: IMAGE_SIZE,
+    borderRadius: Radius.sm,
+    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  productImage: {
+    width: IMAGE_SIZE,
+    height: IMAGE_SIZE,
   },
   cardContent: {
     flex: 1,
@@ -377,14 +476,6 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: FontSize.md,
     fontWeight: '600',
-    marginBottom: 2,
-  },
-  secondaryText: {
-    fontSize: FontSize.sm,
-    marginBottom: 2,
-  },
-  categoryLabel: {
-    fontSize: FontSize.xs,
     marginBottom: 2,
   },
   sizeRow: {

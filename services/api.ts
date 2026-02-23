@@ -162,3 +162,54 @@ export async function syncShoppingList(deviceId: string, list: ShoppingListSyncI
     body: JSON.stringify({ shopping_list: list }),
   });
 }
+
+// ---------- Barcode Scanning ----------
+
+export interface BarcodeLookupResult {
+  found: boolean;
+  product?: Product;
+}
+
+export async function lookupBarcode(barcode: string): Promise<BarcodeLookupResult> {
+  const response = await fetch(`${API_BASE_URL}/barcodes/${barcode}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(API_KEY ? { 'X-API-Key': API_KEY } : {}),
+    },
+  });
+  if (response.status === 404) {
+    return { found: false };
+  }
+  if (!response.ok) {
+    throw new Error(`Barcode lookup failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function linkBarcode(barcode: string, productId: string): Promise<void> {
+  await request<{ message: string }>(`/barcodes/${barcode}`, {
+    method: 'POST',
+    body: JSON.stringify({ product_id: productId }),
+  });
+}
+
+export interface OpenFoodFactsProduct {
+  product_name?: string;
+  brands?: string;
+  image_url?: string;
+  categories?: string;
+}
+
+export async function lookupOpenFoodFacts(barcode: string): Promise<OpenFoodFactsProduct | null> {
+  try {
+    const response = await fetch(
+      `https://world.openfoodfacts.org/api/v2/product/${barcode}?fields=product_name,brands,image_url,categories`,
+    );
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data.status !== 1 || !data.product) return null;
+    return data.product as OpenFoodFactsProduct;
+  } catch {
+    return null;
+  }
+}
