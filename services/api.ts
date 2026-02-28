@@ -101,17 +101,35 @@ export async function getStores(): Promise<Store[]> {
   return request<Store[]>('/product-stores');
 }
 
+export interface GoogleStore {
+  name: string;
+  place_id: string;
+  latitude: number;
+  longitude: number;
+  address: string;
+}
+
+export async function searchGoogleStores(name: string): Promise<GoogleStore[]> {
+  const params = new URLSearchParams({ name });
+  const res = await request<{ stores: GoogleStore[] }>(`/stores/search?${params.toString()}`);
+  return res.stores;
+}
+
 export interface AddProductPayload {
   name: string;
-  store_id: string;
+  store_id?: string;
   store_name?: string;
-  price: number;
+  price?: number;
   currency?: string;
   brand?: string;
   category?: string;
   size_hint?: string;
   image_url?: string;
   url?: string;
+  place_id?: string;
+  latitude?: number;
+  longitude?: number;
+  address?: string;
 }
 
 export interface AddProductResponse {
@@ -124,6 +142,16 @@ export async function addProduct(payload: AddProductPayload): Promise<AddProduct
   return request<AddProductResponse>('/products', {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+}
+
+export async function updateProduct(
+  productId: string,
+  fields: Partial<Pick<Product, 'image_url' | 'brand' | 'category'>>,
+): Promise<{ message: string; product_id: string }> {
+  return request<{ message: string; product_id: string }>(`/products/${productId}`, {
+    method: 'PUT',
+    body: JSON.stringify(fields),
   });
 }
 
@@ -190,6 +218,12 @@ export async function linkBarcode(barcode: string, productId: string): Promise<v
   await request<{ message: string }>(`/barcodes/${barcode}`, {
     method: 'POST',
     body: JSON.stringify({ product_id: productId }),
+  });
+}
+
+export async function unlinkBarcode(barcode: string): Promise<void> {
+  await request<{ message: string }>(`/barcodes/${barcode}`, {
+    method: 'DELETE',
   });
 }
 

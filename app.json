@@ -45,7 +45,7 @@
         {
           "cameraPermission": "Brite Shopping uses your camera to scan product barcodes for quick price lookup."
         }
-      ]
+      ],
     ],
     "experiments": {
       "typedRoutes": true

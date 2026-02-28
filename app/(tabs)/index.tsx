@@ -7,6 +7,7 @@ import {
   LayoutAnimation,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -49,6 +50,7 @@ export default function SearchScreen() {
   const [activeStore, setActiveStore] = useState<string | null>(null);
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scannerVisible, setScannerVisible] = useState(false);
   const colorScheme = useColorScheme() ?? 'light';
@@ -117,6 +119,16 @@ export default function SearchScreen() {
     setActiveStore(next);
     fetchProducts(query, activeCategory, next);
   };
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([
+      fetchProducts(query, activeCategory, activeStore),
+      getCategories().then(setCategories).catch(() => {}),
+      getStores().then(setStores).catch(() => {}),
+    ]);
+    setRefreshing(false);
+  }, [fetchProducts, query, activeCategory, activeStore]);
 
   const toggleFilters = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -351,6 +363,14 @@ export default function SearchScreen() {
           keyExtractor={(item) => item._id}
           style={{ backgroundColor: colors.backgroundSecondary }}
           contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.tint}
+              colors={[colors.tint]}
+            />
+          }
           ListEmptyComponent={
             <View style={styles.centered}>
               <ThemedText style={[styles.emptyText, { color: colors.textSecondary }]}>

@@ -1,6 +1,6 @@
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -23,11 +23,13 @@ import { ButtonSize, FontSize, Radius, Spacing } from '@/constants/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import {
   addProduct,
+  type GoogleStore,
+  type Store,
   getStores,
   linkBarcode,
   lookupBarcode,
   lookupOpenFoodFacts,
-  type Store,
+  searchGoogleStores,
 } from '@/services/api';
 
 export default function AddProductScreen() {
@@ -43,8 +45,6 @@ export default function AddProductScreen() {
     prefill_barcode?: string;
   }>();
 
-  const [stores, setStores] = useState<Store[]>([]);
-  const [loadingStores, setLoadingStores] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -53,15 +53,36 @@ export default function AddProductScreen() {
 
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
-  const [storeId, setStoreId] = useState('');
-  const [storeName, setStoreName] = useState('');
   const [currency, setCurrency] = useState('JMD');
+
+  // Known stores (loaded from our catalog)
+  const [knownStores, setKnownStores] = useState<Store[]>([]);
+  const [loadingStores, setLoadingStores] = useState(true);
+
+  // Unified selected store — either from known list or Google Places
+  type SelectedStore = { store_id: string; store_name: string; product_count?: number; place_id?: string; latitude?: number; longitude?: number; address?: string };
+  const [selectedStore, setSelectedStore] = useState<SelectedStore | null>(null);
+
+  // Google Places fallback search
+  const [showGoogleSearch, setShowGoogleSearch] = useState(false);
+  const [storeSearchQuery, setStoreSearchQuery] = useState('');
+  const [storeSearchResults, setStoreSearchResults] = useState<GoogleStore[]>([]);
+  const [searchingStores, setSearchingStores] = useState(false);
+  const storeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [brand, setBrand] = useState('');
   const [category, setCategory] = useState('');
   const [sizeHint, setSizeHint] = useState('');
   const [packQty, setPackQty] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [url, setUrl] = useState('');
+
+  // Load known stores from catalog
+  useEffect(() => {
+    getStores()
+      .then(setKnownStores)
+      .catch(() => setKnownStores([]))
+      .finally(() => setLoadingStores(false));
+  }, []);
 
   // Apply prefill params from barcode scan result
   useEffect(() => {
@@ -117,45 +138,61 @@ export default function AddProductScreen() {
     );
   };
 
-  useEffect(() => {
-    setLoadingStores(true);
-    getStores()
-      .then((items) => setStores(items))
-      .catch(() => setStores([]))
-      .finally(() => setLoadingStores(false));
-  }, []);
+  const selectKnownStore = (store: Store) => {
+    setSelectedStore({ store_id: store.store_id, store_name: store.store_name, product_count: store.product_count });
+    setShowGoogleSearch(false);
+    setStoreSearchQuery('');
+    setStoreSearchResults([]);
+  };
 
-  const selectedStore = useMemo(
-    () => stores.find((store) => store.store_id === storeId),
-    [stores, storeId],
-  );
-
-  const selectStore = (store: Store) => {
-    setStoreId(store.store_id);
-    if (!storeName.trim()) {
-      setStoreName(store.store_name);
+  const handleStoreSearch = (text: string) => {
+    setStoreSearchQuery(text);
+    if (storeDebounceRef.current) clearTimeout(storeDebounceRef.current);
+    if (!text.trim()) {
+      setStoreSearchResults([]);
+      return;
     }
+    storeDebounceRef.current = setTimeout(async () => {
+      setSearchingStores(true);
+      try {
+        const results = await searchGoogleStores(text);
+        setStoreSearchResults(results);
+      } catch {
+        setStoreSearchResults([]);
+      } finally {
+        setSearchingStores(false);
+      }
+    }, 400);
+  };
+
+  const selectGoogleStore = (store: GoogleStore) => {
+    setSelectedStore({ store_id: store.place_id, store_name: store.name, place_id: store.place_id, latitude: store.latitude, longitude: store.longitude, address: store.address });
+    setShowGoogleSearch(false);
+    setStoreSearchQuery('');
+    setStoreSearchResults([]);
+  };
+
+  const clearSelectedStore = () => {
+    setSelectedStore(null);
+    setShowGoogleSearch(false);
+    setStoreSearchQuery('');
+    setStoreSearchResults([]);
   };
 
   const validate = (): string | null => {
     if (name.trim().length < 2) {
       return 'Product name must be at least 2 characters.';
     }
-    if (!storeId.trim()) {
-      return 'Store ID is required.';
-    }
 
-    const parsedPrice = Number(price);
-    if (!Number.isFinite(parsedPrice)) {
-      return 'Price must be a valid number.';
-    }
-    if (parsedPrice <= 0) {
-      return 'Price must be greater than 0.';
-    }
-
-    const trimmedCurrency = currency.trim().toUpperCase();
-    if (trimmedCurrency.length !== 3) {
-      return 'Currency must be a 3-letter code (e.g. JMD).';
+    if (price.trim()) {
+      const parsedPrice = Number(price);
+      if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+        return 'Price must be a valid number greater than 0.';
+      }
+      const trimmedCurrency = currency.trim().toUpperCase();
+      if (trimmedCurrency.length !== 3) {
+        return 'Currency must be a 3-letter code (e.g. JMD).';
+      }
     }
 
     return null;
@@ -171,6 +208,10 @@ export default function AddProductScreen() {
     setImageUrl('');
     setUrl('');
     setScannedBarcode('');
+    setSelectedStore(null);
+    setShowGoogleSearch(false);
+    setStoreSearchQuery('');
+    setStoreSearchResults([]);
   };
 
   const submit = async () => {
@@ -196,18 +237,30 @@ export default function AddProductScreen() {
       combinedSizeHint = trimmedSize;
     }
 
-    const payload = {
+    const payload: Parameters<typeof addProduct>[0] = {
       name: name.trim(),
-      store_id: storeId.trim().toLowerCase(),
-      store_name: storeName.trim() || selectedStore?.store_name || storeId.trim(),
-      price: Number(price),
-      currency: currency.trim().toUpperCase(),
       brand: brand.trim() || undefined,
       category: category.trim() || undefined,
       size_hint: combinedSizeHint || undefined,
       image_url: imageUrl.trim() || undefined,
       url: url.trim() || undefined,
     };
+
+    if (selectedStore) {
+      payload.store_id = selectedStore.store_id;
+      payload.store_name = selectedStore.store_name;
+      if (selectedStore.place_id) {
+        payload.place_id = selectedStore.place_id;
+        payload.latitude = selectedStore.latitude;
+        payload.longitude = selectedStore.longitude;
+        payload.address = selectedStore.address;
+      }
+    }
+
+    if (price.trim()) {
+      payload.price = Number(price);
+      payload.currency = currency.trim().toUpperCase();
+    }
 
     setSubmitting(true);
     try {
@@ -238,9 +291,10 @@ export default function AddProductScreen() {
         <ScrollView
           contentContainerStyle={[styles.scroll, { paddingBottom: tabBarHeight + Spacing.xl }]}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           <View style={styles.headerBlock}>
-            <ThemedText type="title">Add Product / Price</ThemedText>
+            <ThemedText type="title">Add Product</ThemedText>
             <ThemedText style={[styles.subtitle, { color: colors.textSecondary }]}>
               Submit a product and price from any store to improve catalog coverage.
             </ThemedText>
@@ -307,45 +361,103 @@ export default function AddProductScreen() {
           ) : null}
 
           <View style={styles.section}>
-            <ThemedText style={styles.label}>Quick Store Select</ThemedText>
-            {loadingStores ? (
-              <View style={styles.loadingStoresRow}>
-                <ActivityIndicator size="small" color={colors.tint} />
-                <ThemedText style={[styles.loadingStoresText, { color: colors.textSecondary }]}>Loading stores...</ThemedText>
+            <ThemedText style={styles.label}>Store (optional)</ThemedText>
+
+            {selectedStore ? (
+              /* Selected store card */
+              <View style={[styles.selectedStoreCard, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
+                <View style={styles.selectedStoreInfo}>
+                  <ThemedText style={styles.selectedStoreName}>{selectedStore.store_name}</ThemedText>
+                  {selectedStore.address ? (
+                    <ThemedText style={[styles.selectedStoreAddress, { color: colors.textSecondary }]} numberOfLines={2}>
+                      {selectedStore.address}
+                    </ThemedText>
+                  ) : selectedStore.product_count !== undefined ? (
+                    <ThemedText style={[styles.selectedStoreAddress, { color: colors.textSecondary }]}>
+                      {selectedStore.product_count.toLocaleString()} products in catalog
+                    </ThemedText>
+                  ) : null}
+                </View>
+                <Pressable onPress={clearSelectedStore} hitSlop={8}>
+                  <IconSymbol name="xmark" size={16} color={colors.textSecondary} />
+                </Pressable>
               </View>
-            ) : stores.length > 0 ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.storeChipRow}
-              >
-                {stores.map((store) => (
+            ) : (
+              <>
+                {/* Known stores list */}
+                {loadingStores ? (
+                  <ActivityIndicator size="small" color={colors.tint} style={{ marginVertical: Spacing.sm }} />
+                ) : knownStores.length > 0 && !showGoogleSearch ? (
+                  <View style={[styles.storeResultsList, { borderColor: colors.border }]}>
+                    {knownStores.map((store) => (
+                      <Pressable
+                        key={store.store_id}
+                        style={[styles.storeResultItem, { borderColor: colors.border }]}
+                        onPress={() => selectKnownStore(store)}
+                      >
+                        <ThemedText style={styles.storeResultName}>{store.store_name}</ThemedText>
+                        <ThemedText style={[styles.storeResultAddress, { color: colors.textSecondary }]}>
+                          {store.product_count.toLocaleString()} products
+                        </ThemedText>
+                      </Pressable>
+                    ))}
+                  </View>
+                ) : null}
+
+                {/* Google Places search toggle / search input */}
+                {!showGoogleSearch ? (
                   <Pressable
-                    key={store.store_id}
-                    onPress={() => selectStore(store)}
-                    style={[
-                      styles.storeChip,
-                      store.store_id === storeId
-                        ? { backgroundColor: colors.success }
-                        : { backgroundColor: colors.backgroundSecondary },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Select ${store.store_name}`}
-                    accessibilityState={{ selected: store.store_id === storeId }}
+                    onPress={() => setShowGoogleSearch(true)}
+                    style={{ marginTop: knownStores.length > 0 ? Spacing.sm : 0 }}
+                    hitSlop={8}
                   >
-                    <ThemedText
-                      style={[
-                        styles.storeChipText,
-                        store.store_id === storeId && styles.storeChipTextSelected,
-                      ]}
-                    >
-                      {store.store_name}
+                    <ThemedText style={[styles.helperText, { color: colors.tint }]}>
+                      {knownStores.length > 0 ? '+ Search for a different store on Google' : 'Search for a store on Google...'}
                     </ThemedText>
                   </Pressable>
-                ))}
-              </ScrollView>
-            ) : (
-              <ThemedText style={[styles.helperText, { color: colors.textSecondary }]}>No stores available yet. Enter a custom store below.</ThemedText>
+                ) : (
+                  <>
+                    <TextInput
+                      value={storeSearchQuery}
+                      onChangeText={handleStoreSearch}
+                      placeholder="Search Google Maps for a store..."
+                      placeholderTextColor={colors.icon}
+                      style={[styles.input, { backgroundColor: colors.backgroundSecondary, color: colors.text, marginTop: Spacing.xs }]}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      autoFocus
+                      accessibilityLabel="Search for a store on Google"
+                    />
+                    {searchingStores && (
+                      <ActivityIndicator size="small" color={colors.tint} style={{ marginTop: Spacing.sm }} />
+                    )}
+                    {storeSearchResults.length > 0 && (
+                      <View style={[styles.storeResultsList, { borderColor: colors.border, marginTop: Spacing.sm }]}>
+                        {storeSearchResults.map((store) => (
+                          <Pressable
+                            key={store.place_id}
+                            style={[styles.storeResultItem, { borderColor: colors.border }]}
+                            onPress={() => selectGoogleStore(store)}
+                          >
+                            <ThemedText style={styles.storeResultName}>{store.name}</ThemedText>
+                            <ThemedText style={[styles.storeResultAddress, { color: colors.textSecondary }]} numberOfLines={1}>
+                              {store.address}
+                            </ThemedText>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                    {storeSearchQuery.trim() && !searchingStores && storeSearchResults.length === 0 && (
+                      <ThemedText style={[styles.helperText, { color: colors.textSecondary, marginTop: Spacing.xs }]}>
+                        No stores found.
+                      </ThemedText>
+                    )}
+                    <Pressable onPress={() => { setShowGoogleSearch(false); setStoreSearchQuery(''); setStoreSearchResults([]); }} hitSlop={8} style={{ marginTop: Spacing.xs }}>
+                      <ThemedText style={[styles.helperText, { color: colors.textSecondary }]}>← Back to store list</ThemedText>
+                    </Pressable>
+                  </>
+                )}
+              </>
             )}
           </View>
 
@@ -365,7 +477,7 @@ export default function AddProductScreen() {
 
           <View style={styles.row}>
             <View style={styles.halfWidth}>
-              <ThemedText style={styles.label}>Price *</ThemedText>
+              <ThemedText style={styles.label}>Price{selectedStore ? ' *' : ''}</ThemedText>
               <TextInput
                 value={price}
                 onChangeText={setPrice}
@@ -377,7 +489,7 @@ export default function AddProductScreen() {
               />
             </View>
             <View style={styles.currencyBox}>
-              <ThemedText style={styles.label}>Currency *</ThemedText>
+              <ThemedText style={styles.label}>Currency{selectedStore ? ' *' : ''}</ThemedText>
               <TextInput
                 value={currency}
                 onChangeText={(value) => setCurrency(value.toUpperCase())}
@@ -392,34 +504,6 @@ export default function AddProductScreen() {
             </View>
           </View>
 
-          <View style={styles.row}>
-            <View style={styles.halfWidth}>
-              <ThemedText style={styles.label}>Store ID *</ThemedText>
-              <TextInput
-                value={storeId}
-                onChangeText={(value) => setStoreId(value.toLowerCase())}
-                placeholder="e.g. hilo"
-                placeholderTextColor={colors.icon}
-                style={[styles.input, { backgroundColor: colors.backgroundSecondary, color: colors.text }]}
-                autoCapitalize="none"
-                autoCorrect={false}
-                accessibilityLabel="Store ID"
-              />
-            </View>
-            <View style={styles.halfWidth}>
-              <ThemedText style={styles.label}>Store Name</ThemedText>
-              <TextInput
-                value={storeName}
-                onChangeText={setStoreName}
-                placeholder={selectedStore?.store_name || 'Display name'}
-                placeholderTextColor={colors.icon}
-                style={[styles.input, { backgroundColor: colors.backgroundSecondary, color: colors.text }]}
-                autoCapitalize="words"
-                autoCorrect={false}
-                accessibilityLabel="Store name"
-              />
-            </View>
-          </View>
 
           <View style={styles.row}>
             <View style={styles.halfWidth}>
@@ -584,13 +668,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     fontSize: FontSize.md,
   },
-  loadingStoresRow: {
+  selectedStoreCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: Radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: Spacing.md,
   },
-  loadingStoresText: {
+  selectedStoreInfo: {
+    flex: 1,
+  },
+  selectedStoreName: {
+    fontSize: FontSize.md,
+    fontWeight: '600',
+  },
+  selectedStoreAddress: {
+    fontSize: FontSize.xs,
+    marginTop: 2,
+  },
+  storeResultsList: {
+    marginTop: Spacing.sm,
+    borderRadius: Radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  storeResultItem: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  storeResultName: {
     fontSize: FontSize.sm,
+    fontWeight: '600',
+  },
+  storeResultAddress: {
+    fontSize: FontSize.xs,
+    marginTop: 2,
   },
   barcodeDisplay: {
     flexDirection: 'row',
@@ -630,22 +744,6 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontWeight: '600',
     textAlign: 'center',
-  },
-  storeChipRow: {
-    gap: Spacing.sm,
-    paddingRight: Spacing.sm,
-  },
-  storeChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: Radius.lg,
-  },
-  storeChipText: {
-    fontSize: FontSize.sm,
-    fontWeight: '500',
-  },
-  storeChipTextSelected: {
-    color: '#fff',
   },
   feedbackBox: {
     borderWidth: 1,
