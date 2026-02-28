@@ -1,12 +1,12 @@
 <!-- SYNC: When updating this file, also update CLAUDE.md with the same changes (and vice versa). -->
 # Brite Shopping Mobile
 
-React Native (Expo) mobile app for the Brite Shopping ecosystem — a price comparison platform for Jamaican shoppers.
+React Native (Expo) mobile app for the Brite Shopping ecosystem — a price comparison platform for shoppers.
 
 ## Product Vision
-- Help Jamaican shoppers find products, see where they're available, and compare prices
+- Help shoppers find products, see where they're available, and compare prices
 - User sees a product with its estimated/average price, then all store locations with their specific prices
-- Stores can be physical locations or online shops accessible to Jamaicans
+- Stores can be physical locations or online shops accessible online
 - Core user flow: search → see product + estimated price → see store locations + their prices → decide
 
 ## Key Constraint
@@ -41,7 +41,7 @@ React Native (Expo) mobile app for the Brite Shopping ecosystem — a price comp
 ## Important Notes
 - **Never commit `ios/` or `android/` directories** — these are Expo prebuild artifacts, already in `.gitignore`
 - Brand field exists in product data but is currently **hidden in the UI** — inconsistent across sources. Will be exposed once catalog engine data quality improves.
-- ~7,500+ products available from 5 Jamaican grocery sources (ShopSampars, Store To Door, CoolMarket, Hi-Lo, Grace Foods)
+- ~7,500+ products available from 5 grocery sources (ShopSampars, Store To Door, CoolMarket, Hi-Lo, Grace Foods)
 - Shopping list is local-only (AsyncStorage with anonymous device profile)
 
 ## UX Design Principles
