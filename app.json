@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "brite-shopping-mobile",
-    "slug": "brite-shopping-mobile",
+    "name": "Brite Shopping",
+    "slug": "brite-shopping",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "briteshoppingmobile",
+    "scheme": "briteshopping",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
