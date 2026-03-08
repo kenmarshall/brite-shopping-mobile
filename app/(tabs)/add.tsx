@@ -1,3 +1,5 @@
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -31,6 +33,7 @@ import {
   lookupOpenFoodFacts,
   searchGoogleStores,
 } from '@/services/api';
+import { uploadImage, withBackgroundRemoved } from '@/services/cloudinary';
 
 export default function AddProductScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -40,8 +43,6 @@ export default function AddProductScreen() {
   const params = useLocalSearchParams<{
     prefill_name?: string;
     prefill_brand?: string;
-    prefill_category?: string;
-    prefill_image_url?: string;
     prefill_barcode?: string;
   }>();
 
@@ -50,6 +51,9 @@ export default function AddProductScreen() {
   const [success, setSuccess] = useState<string | null>(null);
   const [scannerVisible, setScannerVisible] = useState(false);
   const [scannedBarcode, setScannedBarcode] = useState('');
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [localImageUri, setLocalImageUri] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
@@ -70,11 +74,8 @@ export default function AddProductScreen() {
   const [searchingStores, setSearchingStores] = useState(false);
   const storeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [brand, setBrand] = useState('');
-  const [category, setCategory] = useState('');
   const [sizeHint, setSizeHint] = useState('');
   const [packQty, setPackQty] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
-  const [url, setUrl] = useState('');
 
   // Load known stores from catalog
   useEffect(() => {
@@ -88,10 +89,8 @@ export default function AddProductScreen() {
   useEffect(() => {
     if (params.prefill_name) setName(params.prefill_name);
     if (params.prefill_brand) setBrand(params.prefill_brand);
-    if (params.prefill_category) setCategory(params.prefill_category);
-    if (params.prefill_image_url) setImageUrl(params.prefill_image_url);
     if (params.prefill_barcode) setScannedBarcode(params.prefill_barcode);
-  }, [params.prefill_name, params.prefill_brand, params.prefill_category, params.prefill_image_url, params.prefill_barcode]);
+  }, [params.prefill_name, params.prefill_brand, params.prefill_barcode]);
 
   const handleBarcodeScan = async (barcodeValue: string) => {
     setScannerVisible(false);
@@ -111,8 +110,6 @@ export default function AddProductScreen() {
       if (offProduct?.product_name) {
         setName(offProduct.product_name);
         if (offProduct.brands) setBrand(offProduct.brands);
-        if (offProduct.categories) setCategory(offProduct.categories.split(',')[0]?.trim() || '');
-        if (offProduct.image_url) setImageUrl(offProduct.image_url);
         return;
       }
     } catch { /* continue */ }
@@ -120,22 +117,33 @@ export default function AddProductScreen() {
     // Not found anywhere — barcode stored for later linking
   };
 
-  const showCaptureShell = (mode: 'barcode' | 'photo' | 'receipt') => {
-    if (mode === 'barcode') {
-      setScannerVisible(true);
+  const pickOrTakePhoto = async (source: 'library' | 'camera') => {
+    const request = source === 'library'
+      ? ImagePicker.requestMediaLibraryPermissionsAsync
+      : ImagePicker.requestCameraPermissionsAsync;
+    const { status } = await request();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', source === 'library'
+        ? 'Allow access to your photo library to add a product image.'
+        : 'Allow camera access to take a product photo.');
       return;
     }
-    if (mode === 'photo') {
-      Alert.alert(
-        'Product Photo (Coming Soon)',
-        'Product photo parsing will suggest name/brand/category from image AI. For now, use the manual form fields.',
-      );
-      return;
+    const result = source === 'library'
+      ? await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.5 })
+      : await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.5 });
+    if (result.canceled || !result.assets?.[0]) return;
+    const uri = result.assets[0].uri;
+    setLocalImageUri(uri);
+    setUploadingImage(true);
+    try {
+      const uploaded = await uploadImage(uri);
+      setImageUrl(withBackgroundRemoved(uploaded.secure_url));
+    } catch (err: any) {
+      Alert.alert('Upload failed', err?.message || 'Could not upload image. Please try again.');
+      setLocalImageUri(null);
+    } finally {
+      setUploadingImage(false);
     }
-    Alert.alert(
-      'Receipt Scan (Coming Soon)',
-      'Receipt capture will extract multiple items and prices in one step. For now, add one item manually below.',
-    );
   };
 
   const selectKnownStore = (store: Store) => {
@@ -183,7 +191,6 @@ export default function AddProductScreen() {
     if (name.trim().length < 2) {
       return 'Product name must be at least 2 characters.';
     }
-
     if (price.trim()) {
       const parsedPrice = Number(price);
       if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
@@ -194,7 +201,6 @@ export default function AddProductScreen() {
         return 'Currency must be a 3-letter code (e.g. JMD).';
       }
     }
-
     return null;
   };
 
@@ -202,12 +208,11 @@ export default function AddProductScreen() {
     setName('');
     setPrice('');
     setBrand('');
-    setCategory('');
     setSizeHint('');
     setPackQty('');
-    setImageUrl('');
-    setUrl('');
     setScannedBarcode('');
+    setImageUrl(null);
+    setLocalImageUri(null);
     setSelectedStore(null);
     setShowGoogleSearch(false);
     setStoreSearchQuery('');
@@ -224,8 +229,6 @@ export default function AddProductScreen() {
       return;
     }
 
-    // Combine pack qty and size into a single size_hint for the API
-    // e.g. packQty="6", sizeHint="330ml" → "6x330ml"
     const trimmedSize = sizeHint.trim();
     const trimmedPack = packQty.trim();
     let combinedSizeHint: string | undefined;
@@ -240,10 +243,8 @@ export default function AddProductScreen() {
     const payload: Parameters<typeof addProduct>[0] = {
       name: name.trim(),
       brand: brand.trim() || undefined,
-      category: category.trim() || undefined,
       size_hint: combinedSizeHint || undefined,
-      image_url: imageUrl.trim() || undefined,
-      url: url.trim() || undefined,
+      image_url: imageUrl || undefined,
     };
 
     if (selectedStore) {
@@ -265,7 +266,6 @@ export default function AddProductScreen() {
     setSubmitting(true);
     try {
       const response = await addProduct(payload);
-      // Link barcode to the newly created product if we have one
       if (scannedBarcode && response.product_id) {
         try {
           await linkBarcode(scannedBarcode, response.product_id);
@@ -313,14 +313,10 @@ export default function AddProductScreen() {
           )}
 
           <View style={styles.section}>
-            <ThemedText style={styles.label}>Quick Capture (Shells)</ThemedText>
-            <ThemedText style={[styles.helperText, { color: colors.textSecondary }]}>
-              Camera-based capture flows are scaffolded next.
-            </ThemedText>
             <View style={styles.captureRow}>
               <Pressable
                 style={[styles.captureButton, { backgroundColor: colors.backgroundSecondary }]}
-                onPress={() => showCaptureShell('barcode')}
+                onPress={() => setScannerVisible(true)}
                 accessibilityRole="button"
                 accessibilityLabel="Scan barcode"
               >
@@ -329,23 +325,48 @@ export default function AddProductScreen() {
               </Pressable>
               <Pressable
                 style={[styles.captureButton, { backgroundColor: colors.backgroundSecondary }]}
-                onPress={() => showCaptureShell('photo')}
+                onPress={() => Alert.alert('Add Photo', 'Choose a source', [
+                  { text: 'Photo Library', onPress: () => pickOrTakePhoto('library') },
+                  { text: 'Camera', onPress: () => pickOrTakePhoto('camera') },
+                  { text: 'Cancel', style: 'cancel' },
+                ])}
                 accessibilityRole="button"
-                accessibilityLabel="Take product photo"
+                accessibilityLabel="Add product photo"
               >
-                <ThemedText style={styles.captureIcon}>@</ThemedText>
-                <ThemedText style={[styles.captureLabel, { color: colors.text }]}>Product Photo</ThemedText>
-              </Pressable>
-              <Pressable
-                style={[styles.captureButton, { backgroundColor: colors.backgroundSecondary }]}
-                onPress={() => showCaptureShell('receipt')}
-                accessibilityRole="button"
-                accessibilityLabel="Scan receipt photo"
-              >
-                <ThemedText style={styles.captureIcon}>%</ThemedText>
-                <ThemedText style={[styles.captureLabel, { color: colors.text }]}>Scan Receipt</ThemedText>
+                {uploadingImage ? (
+                  <ActivityIndicator size="small" color={colors.tint} />
+                ) : (
+                  <IconSymbol name="photo" size={24} color={colors.tint} />
+                )}
+                <ThemedText style={[styles.captureLabel, { color: colors.text }]}>
+                  {uploadingImage ? 'Uploading…' : 'Add Photo'}
+                </ThemedText>
               </Pressable>
             </View>
+
+            {(localImageUri || imageUrl) && (
+              <View style={styles.imagePreviewRow}>
+                <Image
+                  source={{ uri: localImageUri || imageUrl! }}
+                  style={[styles.imageThumb, { backgroundColor: colors.backgroundSecondary }]}
+                  contentFit="cover"
+                />
+                {uploadingImage && (
+                  <ActivityIndicator size="small" color={colors.tint} style={styles.imageSpinner} />
+                )}
+                {!uploadingImage && (
+                  <Pressable
+                    onPress={() => { setImageUrl(null); setLocalImageUri(null); }}
+                    style={[styles.imageRemove, { backgroundColor: colors.backgroundSecondary }]}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Remove photo"
+                  >
+                    <IconSymbol name="xmark" size={14} color={colors.error} />
+                  </Pressable>
+                )}
+              </View>
+            )}
           </View>
 
           {scannedBarcode ? (
@@ -364,7 +385,6 @@ export default function AddProductScreen() {
             <ThemedText style={styles.label}>Store (optional)</ThemedText>
 
             {selectedStore ? (
-              /* Selected store card */
               <View style={[styles.selectedStoreCard, { backgroundColor: colors.backgroundSecondary, borderColor: colors.border }]}>
                 <View style={styles.selectedStoreInfo}>
                   <ThemedText style={styles.selectedStoreName}>{selectedStore.store_name}</ThemedText>
@@ -384,7 +404,6 @@ export default function AddProductScreen() {
               </View>
             ) : (
               <>
-                {/* Known stores list */}
                 {loadingStores ? (
                   <ActivityIndicator size="small" color={colors.tint} style={{ marginVertical: Spacing.sm }} />
                 ) : knownStores.length > 0 && !showGoogleSearch ? (
@@ -404,7 +423,6 @@ export default function AddProductScreen() {
                   </View>
                 ) : null}
 
-                {/* Google Places search toggle / search input */}
                 {!showGoogleSearch ? (
                   <Pressable
                     onPress={() => setShowGoogleSearch(true)}
@@ -504,34 +522,18 @@ export default function AddProductScreen() {
             </View>
           </View>
 
-
-          <View style={styles.row}>
-            <View style={styles.halfWidth}>
-              <ThemedText style={styles.label}>Brand</ThemedText>
-              <TextInput
-                value={brand}
-                onChangeText={setBrand}
-                placeholder="Optional"
-                placeholderTextColor={colors.icon}
-                style={[styles.input, { backgroundColor: colors.backgroundSecondary, color: colors.text }]}
-                autoCapitalize="words"
-                autoCorrect={false}
-                accessibilityLabel="Brand"
-              />
-            </View>
-            <View style={styles.halfWidth}>
-              <ThemedText style={styles.label}>Category</ThemedText>
-              <TextInput
-                value={category}
-                onChangeText={setCategory}
-                placeholder="Optional"
-                placeholderTextColor={colors.icon}
-                style={[styles.input, { backgroundColor: colors.backgroundSecondary, color: colors.text }]}
-                autoCapitalize="words"
-                autoCorrect={false}
-                accessibilityLabel="Category"
-              />
-            </View>
+          <View style={styles.section}>
+            <ThemedText style={styles.label}>Brand</ThemedText>
+            <TextInput
+              value={brand}
+              onChangeText={setBrand}
+              placeholder="Optional"
+              placeholderTextColor={colors.icon}
+              style={[styles.input, { backgroundColor: colors.backgroundSecondary, color: colors.text }]}
+              autoCapitalize="words"
+              autoCorrect={false}
+              accessibilityLabel="Brand"
+            />
           </View>
 
           <View style={styles.row}>
@@ -561,34 +563,6 @@ export default function AddProductScreen() {
                 accessibilityLabel="Pack quantity"
               />
             </View>
-          </View>
-
-          <View style={styles.section}>
-            <ThemedText style={styles.label}>Product URL</ThemedText>
-            <TextInput
-              value={url}
-              onChangeText={setUrl}
-              placeholder="https://..."
-              placeholderTextColor={colors.icon}
-              style={[styles.input, { backgroundColor: colors.backgroundSecondary, color: colors.text }]}
-              autoCapitalize="none"
-              autoCorrect={false}
-              accessibilityLabel="Product URL"
-            />
-          </View>
-
-          <View style={styles.section}>
-            <ThemedText style={styles.label}>Image URL</ThemedText>
-            <TextInput
-              value={imageUrl}
-              onChangeText={setImageUrl}
-              placeholder="https://..."
-              placeholderTextColor={colors.icon}
-              style={[styles.input, { backgroundColor: colors.backgroundSecondary, color: colors.text }]}
-              autoCapitalize="none"
-              autoCorrect={false}
-              accessibilityLabel="Image URL"
-            />
           </View>
 
           <Pressable
@@ -723,9 +697,29 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   captureRow: {
-    marginTop: Spacing.sm,
     flexDirection: 'row',
     gap: Spacing.sm,
+  },
+  imagePreviewRow: {
+    marginTop: Spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  imageThumb: {
+    width: 64,
+    height: 64,
+    borderRadius: Radius.sm,
+  },
+  imageSpinner: {
+    marginLeft: Spacing.xs,
+  },
+  imageRemove: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   captureButton: {
     flex: 1,
@@ -734,11 +728,7 @@ const styles = StyleSheet.create({
     padding: Spacing.sm,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  captureIcon: {
-    fontSize: FontSize.lg,
-    fontWeight: '700',
-    marginBottom: 4,
+    gap: Spacing.xs,
   },
   captureLabel: {
     fontSize: FontSize.sm,

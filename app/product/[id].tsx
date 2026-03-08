@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
+import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -29,17 +30,19 @@ export default function ProductDetailScreen() {
   const colors = Colors[colorScheme];
   const router = useRouter();
 
-  useEffect(() => {
-    if (!id) return;
-    setLoading(true);
-    getProduct(id)
-      .then((p) => {
-        setProduct(p);
-        isInList(p._id).then(setInList);
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [id]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!id) return;
+      setLoading(true);
+      getProduct(id)
+        .then((p) => {
+          setProduct(p);
+          isInList(p._id).then(setInList);
+        })
+        .catch((err) => setError(err.message))
+        .finally(() => setLoading(false));
+    }, [id]),
+  );
 
   const handleAddToList = async () => {
     if (!product) return;
@@ -89,17 +92,26 @@ export default function ProductDetailScreen() {
   return (
     <ThemedView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
-        <Pressable
-          onPress={() => router.back()}
-          style={styles.backNav}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          hitSlop={8}
-        >
-          <ThemedText style={[styles.backArrow, { color: colors.tint }]}>
-            {'<'} Back
-          </ThemedText>
-        </Pressable>
+        <View style={styles.backNav}>
+          <Pressable
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            hitSlop={8}
+          >
+            <ThemedText style={[styles.backArrow, { color: colors.tint }]}>
+              {'<'} Back
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            onPress={() => router.push({ pathname: '/product/edit', params: { id: product._id } })}
+            accessibilityRole="button"
+            accessibilityLabel="Edit product"
+            hitSlop={8}
+          >
+            <ThemedText style={[styles.editLink, { color: colors.tint }]}>Edit</ThemedText>
+          </Pressable>
+        </View>
 
         {product.image_url && !product.image_url.startsWith('data:image/svg') ? (
           <Image
@@ -264,8 +276,15 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.headerTop,
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.sm,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   backArrow: {
+    fontSize: FontSize.md,
+    fontWeight: '600',
+  },
+  editLink: {
     fontSize: FontSize.md,
     fontWeight: '600',
   },

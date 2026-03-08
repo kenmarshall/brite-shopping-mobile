@@ -16,7 +16,7 @@ import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
 import { ButtonSize, FontSize, Radius, Spacing } from '@/constants/Theme';
-import { formatProductSize } from '@/utils/format';
+import { formatProductSize, formatPackInfo, formatPrice } from '@/utils/format';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import {
   type OpenFoodFactsProduct,
@@ -167,7 +167,9 @@ export default function ScanResultScreen() {
 
   const confirmLink = (product: Product, offProduct?: OpenFoodFactsProduct) => {
     const sizeLabel = formatProductSize(product.size);
-    const desc = [product.store_name, sizeLabel].filter(Boolean).join(' \u2022 ');
+    const packLabel = formatPackInfo(product.size);
+    const priceLabel = product.estimated_price ? formatPrice(product.estimated_price) : null;
+    const desc = [sizeLabel, packLabel, priceLabel].filter(Boolean).join(' \u2022 ');
     Alert.alert(
       'Link Barcode?',
       `Link barcode ${barcode} to:\n\n${product.name}${desc ? `\n${desc}` : ''}`,
@@ -188,8 +190,6 @@ export default function ScanResultScreen() {
       params: {
         prefill_name: offProduct.product_name || '',
         prefill_brand: offProduct.brands || '',
-        prefill_category: offProduct.categories?.split(',')[0]?.trim() || '',
-        prefill_image_url: offProduct.image_url || '',
         prefill_barcode: barcode || '',
       },
     });
@@ -323,6 +323,8 @@ export default function ScanResultScreen() {
           }
           renderItem={({ item }) => {
             const sizeLabel = formatProductSize(item.size);
+            const packLabel = formatPackInfo(item.size);
+            const priceLabel = item.estimated_price ? formatPrice(item.estimated_price) : null;
             return (
               <Pressable
                 style={[styles.searchCard, { backgroundColor: colors.card, borderColor: colors.border, marginHorizontal: Spacing.lg }]}
@@ -337,8 +339,8 @@ export default function ScanResultScreen() {
                 )}
                 <View style={styles.searchCardContent}>
                   <ThemedText style={styles.searchCardName} numberOfLines={1}>{item.name}</ThemedText>
-                  <ThemedText style={[styles.searchCardStore, { color: colors.textSecondary }]} numberOfLines={1}>
-                    {[item.store_name, sizeLabel].filter(Boolean).join(' \u2022 ')}
+                  <ThemedText style={[styles.searchCardMeta, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {[sizeLabel, packLabel, priceLabel].filter(Boolean).join(' \u2022 ')}
                   </ThemedText>
                 </View>
                 <ThemedText style={[styles.linkLabel, { color: colors.tint }]}>Link</ThemedText>
@@ -530,6 +532,8 @@ export default function ScanResultScreen() {
         }
         renderItem={({ item }) => {
           const sizeLabel = formatProductSize(item.size);
+          const packLabel = formatPackInfo(item.size);
+          const priceLabel = item.estimated_price ? formatPrice(item.estimated_price) : null;
           return (
             <Pressable
               style={[styles.searchCard, { backgroundColor: colors.card, borderColor: colors.border, marginHorizontal: Spacing.lg }]}
@@ -544,8 +548,8 @@ export default function ScanResultScreen() {
               )}
               <View style={styles.searchCardContent}>
                 <ThemedText style={styles.searchCardName} numberOfLines={1}>{item.name}</ThemedText>
-                <ThemedText style={[styles.searchCardStore, { color: colors.textSecondary }]} numberOfLines={1}>
-                  {[item.store_name, sizeLabel].filter(Boolean).join(' \u2022 ')}
+                <ThemedText style={[styles.searchCardMeta, { color: colors.textSecondary }]} numberOfLines={1}>
+                  {[sizeLabel, packLabel, priceLabel].filter(Boolean).join(' \u2022 ')}
                 </ThemedText>
               </View>
               <ThemedText style={[styles.linkLabel, { color: colors.tint }]}>Link</ThemedText>
@@ -723,7 +727,7 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontWeight: '600',
   },
-  searchCardStore: {
+  searchCardMeta: {
     fontSize: FontSize.xs,
     marginTop: 2,
   },

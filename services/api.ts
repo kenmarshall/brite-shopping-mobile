@@ -145,9 +145,17 @@ export async function addProduct(payload: AddProductPayload): Promise<AddProduct
   });
 }
 
+export interface UpdateProductPayload {
+  name?: string;
+  brand?: string | null;
+  category?: string | null;
+  image_url?: string | null;
+  size?: { value: number | null; unit: string | null; pack_count?: number | null };
+}
+
 export async function updateProduct(
   productId: string,
-  fields: Partial<Pick<Product, 'image_url' | 'brand' | 'category'>>,
+  fields: UpdateProductPayload,
 ): Promise<{ message: string; product_id: string }> {
   return request<{ message: string; product_id: string }>(`/products/${productId}`, {
     method: 'PUT',
