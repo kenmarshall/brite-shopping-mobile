@@ -18,13 +18,14 @@ React Native (Expo) mobile app for the Brite Shopping ecosystem — a price comp
 - API: `https://brite-shopping-api.onrender.com` (production), `http://localhost:5000` (dev)
 
 ## Tech Stack
-- **Framework**: Expo SDK 54, React Native 0.81, React 19
-- **Routing**: Expo Router v6 (file-based, typed routes)
+- **Framework**: Expo SDK 58, React Native 0.88, React 19.3
+- **Routing**: Expo Router 58 (file-based, typed routes). React Navigation APIs come from `expo-router/react-navigation` and `expo-router/js-tabs`, never `@react-navigation/*`
 - **Language**: TypeScript (strict)
 - **Build**: EAS (Expo Application Services)
-- **Testing on device**: Expo Go (SDK 54 compatible)
+- **Testing on device**: Expo Go (SDK 58) or an EAS development build (`expo-dev-client`)
 
 ## Development
+- Node 24 (`.nvmrc`; run `nvm use`). SDK 58 does not support odd-numbered Node releases
 - Install: `npm install`
 - Start: `npx expo start`
 - iOS bundle ID: `com.kenmarshall.briteshopping`
