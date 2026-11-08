@@ -1,4 +1,4 @@
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useBottomTabBarHeight } from 'expo-router/js-tabs';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';

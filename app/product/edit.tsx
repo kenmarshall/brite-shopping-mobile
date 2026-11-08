@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
   },
   imageOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.5)',
     borderRadius: Radius.md,
     justifyContent: 'center',
