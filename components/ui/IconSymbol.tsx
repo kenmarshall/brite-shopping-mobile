@@ -25,7 +25,6 @@ const MAPPING = {
   'circle.lefthalf.filled': 'contrast',
   'envelope': 'email',
   'lock.shield': 'privacy-tip',
-  'storefront': 'storefront',
   'info.circle': 'info-outline',
   'person.crop.circle.fill': 'account-circle',
   'plus.circle.fill': 'add-circle',

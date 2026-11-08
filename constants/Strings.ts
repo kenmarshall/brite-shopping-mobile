@@ -16,10 +16,6 @@ export const Strings = {
     aboutSection: 'About',
     aboutBody:
       'Brite Shopping compares grocery prices across stores so you can see where to get the best deal.',
-    storesWeCompare: 'Stores we compare',
-    storesLoading: 'Loading stores…',
-    storesError: 'Couldn’t load stores. Tap to retry.',
-    storesEmpty: 'No stores available yet',
     version: 'Version',
     disclaimer:
       'Prices are estimates collected from store websites and may differ in store.',

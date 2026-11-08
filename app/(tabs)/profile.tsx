@@ -13,44 +13,23 @@ import { PRIVACY_POLICY_URL, Strings, SUPPORT_EMAIL } from '@/constants/Strings'
 import { ButtonSize, CardShadow, FontSize, Radius, Spacing } from '@/constants/Theme';
 import { ThemePreference, useThemePreference } from '@/contexts/ThemeContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
-import { type Store, getStores } from '@/services/api';
 import { getProfileId } from '@/services/shoppingList';
 
 const S = Strings.profile;
 const THEME_OPTIONS: ThemePreference[] = ['light', 'dark', 'system'];
 
-type StoresState =
-  | { status: 'loading' }
-  | { status: 'error' }
-  | { status: 'success'; stores: Store[] };
-
-async function fetchStoresState(): Promise<StoresState> {
-  try {
-    return { status: 'success', stores: await getStores() };
-  } catch {
-    return { status: 'error' };
-  }
-}
-
 export default function ProfileScreen() {
   const colors = Colors[useColorScheme() ?? 'light'];
   const { preference, setPreference } = useThemePreference();
   const [deviceId, setDeviceId] = useState('');
-  const [storesState, setStoresState] = useState<StoresState>({ status: 'loading' });
 
   const appVersion = Constants.expoConfig?.version ?? '';
 
   useEffect(() => {
-    fetchStoresState().then(setStoresState);
     getProfileId()
       .then(setDeviceId)
       .catch(() => {});
   }, []);
-
-  const retryStores = () => {
-    setStoresState({ status: 'loading' });
-    fetchStoresState().then(setStoresState);
-  };
 
   const contactSupport = async (): Promise<void> => {
     try {
@@ -67,13 +46,6 @@ export default function ProfileScreen() {
       Alert.alert(S.linkErrorTitle, S.linkErrorBody);
     }
   };
-
-  const storesRowValue =
-    storesState.status === 'loading'
-      ? S.storesLoading
-      : storesState.status === 'error'
-        ? undefined
-        : String(storesState.stores.length);
 
   return (
     <ThemedView style={styles.container}>
@@ -140,24 +112,6 @@ export default function ProfileScreen() {
           <ThemedText style={[styles.aboutBody, { color: colors.textSecondary }]}>
             {S.aboutBody}
           </ThemedText>
-          <SettingsRow
-            icon="storefront"
-            label={S.storesWeCompare}
-            value={storesRowValue}
-            onPress={storesState.status === 'error' ? retryStores : undefined}
-          />
-          {storesState.status === 'error' ? (
-            <ThemedText style={[styles.storeNames, { color: colors.error }]}>
-              {S.storesError}
-            </ThemedText>
-          ) : null}
-          {storesState.status === 'success' ? (
-            <ThemedText style={[styles.storeNames, { color: colors.textSecondary }]}>
-              {storesState.stores.length > 0
-                ? storesState.stores.map((s) => s.store_name).join(' · ')
-                : S.storesEmpty}
-            </ThemedText>
-          ) : null}
           <SettingsRow icon="info.circle" label={S.version} value={appVersion} />
         </SettingsSection>
 
@@ -233,12 +187,6 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     lineHeight: 20,
     padding: Spacing.lg,
-  },
-  storeNames: {
-    fontSize: FontSize.sm,
-    lineHeight: 20,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
   },
   footer: {
     gap: Spacing.xs,
