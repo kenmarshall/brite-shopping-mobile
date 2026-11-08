@@ -1,0 +1,107 @@
+import { API_BASE_URL, API_KEY } from '@/services/api';
+
+// Curator tools ship only in dev builds: the key lives in .env.local and is
+// never added to the EAS production environment, so production builds hide them.
+const CURATOR_KEY = process.env.EXPO_PUBLIC_CURATOR_KEY ?? '';
+
+export const IS_CURATOR = CURATOR_KEY.length > 0;
+
+export type StoreType =
+  | 'stall'
+  | 'minimart'
+  | 'market'
+  | 'supermarket'
+  | 'wholesale'
+  | 'pharmacy'
+  | 'meat & grocery';
+
+export type PriceUnit = 'each' | 'kg' | 'lb';
+
+export interface CuratorStore {
+  store_id: string;
+  store_name: string;
+  chain_id: string | null;
+  type: string | null;
+  area: string | null;
+  address: string | null;
+  latitude: number;
+  longitude: number;
+  distance_km?: number;
+}
+
+export interface CreatedProduct {
+  product_id: string;
+  name: string;
+}
+
+async function curatorRequest<T>(path: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(API_KEY ? { 'X-API-Key': API_KEY } : {}),
+      'X-Curator-Key': CURATOR_KEY,
+    },
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.message || `Request failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function listCuratorStores(params: {
+  lat?: number;
+  lng?: number;
+  q?: string;
+}): Promise<CuratorStore[]> {
+  const search = new URLSearchParams({ limit: '60' });
+  if (params.lat != null && params.lng != null) {
+    search.set('lat', String(params.lat));
+    search.set('lng', String(params.lng));
+  }
+  if (params.q?.trim()) search.set('q', params.q.trim());
+  const res = await curatorRequest<{ stores: CuratorStore[] }>(`/curator/stores?${search.toString()}`);
+  return res.stores;
+}
+
+export async function createCuratorStore(store: {
+  store_name: string;
+  type: StoreType;
+  latitude: number;
+  longitude: number;
+  area?: string;
+}): Promise<CuratorStore> {
+  const res = await curatorRequest<{ store: CuratorStore }>('/curator/stores', {
+    method: 'POST',
+    body: JSON.stringify(store),
+  });
+  return res.store;
+}
+
+export async function createCuratorProduct(product: {
+  name: string;
+  size_hint?: string;
+  brand?: string;
+  image_url?: string;
+  sold_by: PriceUnit;
+}): Promise<CreatedProduct> {
+  const res = await curatorRequest<{ product: CreatedProduct }>('/curator/products', {
+    method: 'POST',
+    body: JSON.stringify(product),
+  });
+  return res.product;
+}
+
+export async function recordCuratorPrice(price: {
+  product_id: string;
+  store_id: string;
+  amount: number;
+  unit: PriceUnit;
+  barcode?: string;
+}): Promise<void> {
+  await curatorRequest<{ price: unknown }>('/curator/prices', {
+    method: 'POST',
+    body: JSON.stringify(price),
+  });
+}

@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -13,12 +14,14 @@ import { PRIVACY_POLICY_URL, Strings, SUPPORT_EMAIL } from '@/constants/Strings'
 import { ButtonSize, CardShadow, FontSize, Radius, Spacing } from '@/constants/Theme';
 import { ThemePreference, useThemePreference } from '@/contexts/ThemeContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { IS_CURATOR } from '@/services/curator';
 import { getProfileId } from '@/services/shoppingList';
 
 const S = Strings.profile;
 const THEME_OPTIONS: ThemePreference[] = ['light', 'dark', 'system'];
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const colors = Colors[useColorScheme() ?? 'light'];
   const { preference, setPreference } = useThemePreference();
   const [deviceId, setDeviceId] = useState('');
@@ -102,6 +105,12 @@ export default function ProfileScreen() {
             }
           />
         </SettingsSection>
+
+        {IS_CURATOR ? (
+          <SettingsSection title={S.curatorSection}>
+            <SettingsRow icon="barcode.viewfinder" label={S.priceScanning} onPress={() => router.push('/curator')} />
+          </SettingsSection>
+        ) : null}
 
         <SettingsSection title={S.supportSection}>
           <SettingsRow icon="envelope" label={S.contactSupport} onPress={contactSupport} />

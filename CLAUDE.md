@@ -34,6 +34,7 @@ React Native (Expo) mobile app for the Brite Shopping ecosystem — a price comp
 - **Search (Home)** — unified search bar + category chips + product list
 - **Product Detail** — hero image, price comparison across stores, tags, category badge
 - **Explore** — placeholder (coming soon)
+- **Curator: price scanning** (`app/curator/*`) — pick the store you're in (nearest first) or pin a new one, then scan barcodes and record shelf prices. Shown in Profile only when `EXPO_PUBLIC_CURATOR_KEY` is set (dev builds via `.env.local`). Never add that key to the EAS production environment
 
 ## API Client
 - `services/api.ts` — all API calls (searchProducts, getProduct, getCategories, etc.)

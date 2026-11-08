@@ -44,6 +44,12 @@
           "cameraPermission": "Brite Shopping uses your camera to scan product barcodes for quick price lookup."
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Brite Shopping uses your location to show the stores near you when recording prices."
+        }
+      ],
       "expo-font",
       "expo-image",
       "expo-status-bar",

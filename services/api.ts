@@ -1,8 +1,8 @@
-const API_BASE_URL = 'https://brite-shopping-api.onrender.com';
+export const API_BASE_URL = 'https://brite-shopping-api.onrender.com';
 
 // App-level API key — blocks casual unauthorized access.
 // Set via EXPO_PUBLIC_API_KEY env var or defaults to empty (no enforcement in dev).
-const API_KEY = process.env.EXPO_PUBLIC_API_KEY ?? '';
+export const API_KEY = process.env.EXPO_PUBLIC_API_KEY ?? '';
 
 export interface LocationPrice {
   location_id: string;
@@ -10,6 +10,8 @@ export interface LocationPrice {
   amount: number;
   currency: string;
   last_seen_at: string;
+  price_unit?: 'kg' | 'lb' | null;
+  source?: string;
 }
 
 export interface Product {
@@ -19,6 +21,7 @@ export interface Product {
   brand: string | null;
   category: string | null;
   size: { value: number | null; unit: string | null; pack_count?: number | null };
+  sold_by?: { kind: 'each' | 'weight' | 'pack'; unit: 'kg' | 'lb' | null };
   tags: string[];
   estimated_price: number | null;
   location_prices: LocationPrice[];
@@ -204,6 +207,9 @@ export async function syncShoppingList(deviceId: string, list: ShoppingListSyncI
 export interface BarcodeLookupResult {
   found: boolean;
   product?: Product;
+  /** Open Food Facts data when the barcode is known there but not linked in our catalog */
+  external_data?: { name?: string; brand?: string; image_url?: string };
+  suggestions?: Product[];
 }
 
 export async function lookupBarcode(barcode: string): Promise<BarcodeLookupResult> {

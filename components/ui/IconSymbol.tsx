@@ -35,6 +35,10 @@ const MAPPING = {
   'xmark': 'close',
   'flashlight.on.fill': 'flash-on',
   'flashlight.off.fill': 'flash-off',
+  'location.fill': 'my-location',
+  'mappin.and.ellipse': 'add-location-alt',
+  'tag.fill': 'sell',
+  'checkmark.circle.fill': 'check-circle',
 } as IconMapping;
 
 /**
