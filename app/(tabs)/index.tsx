@@ -1,5 +1,6 @@
+import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -21,6 +22,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
+import { Strings } from '@/constants/Strings';
 import { ButtonSize, CardShadow, FontSize, Radius, Spacing } from '@/constants/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import {
@@ -31,7 +33,7 @@ import {
   getStores,
   searchProducts,
 } from '@/services/api';
-import { addToList } from '@/services/shoppingList';
+import { addToList, getShoppingList, removeFromList } from '@/services/shoppingList';
 import { formatMeasure, formatPackInfo, formatPrice, formatStoreCount } from '@/utils/format';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -53,6 +55,8 @@ export default function SearchScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scannerVisible, setScannerVisible] = useState(false);
+  const [listIds, setListIds] = useState<Set<string>>(new Set());
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const router = useRouter();
@@ -135,18 +139,48 @@ export default function SearchScreen() {
     setFiltersVisible((v) => !v);
   };
 
-  const handleQuickAdd = async (item: Product) => {
-    await addToList({
-      productId: item._id,
-      name: item.name,
-      estimatedPrice: item.estimated_price,
-      imageUrl: item.image_url,
-    });
+  // Keep cart buttons in sync with changes made on the List tab
+  useFocusEffect(
+    useCallback(() => {
+      getShoppingList()
+        .then((list) => setListIds(new Set(list.map((i) => i.productId))))
+        .catch(() => {});
+    }, []),
+  );
+
+  const handleToggleList = async (item: Product) => {
+    if (pendingIds.has(item._id)) return;
+    setPendingIds((prev) => new Set(prev).add(item._id));
+    const wasInList = listIds.has(item._id);
+    try {
+      const list = wasInList
+        ? await removeFromList(item._id)
+        : await addToList({
+            productId: item._id,
+            name: item.name,
+            estimatedPrice: item.estimated_price,
+            imageUrl: item.image_url,
+          });
+      setListIds(new Set(list.map((i) => i.productId)));
+      Haptics.impactAsync(
+        wasInList ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium,
+      );
+    } catch {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setPendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item._id);
+        return next;
+      });
+    }
   };
 
   const renderProduct = ({ item }: { item: Product }) => {
     const packLabel = formatPackInfo(item.size);
     const measureLabel = formatMeasure(item.size);
+    const inList = listIds.has(item._id);
+    const pending = pendingIds.has(item._id);
     return (
       <Pressable
         style={[styles.card, { backgroundColor: colors.card }]}
@@ -198,16 +232,28 @@ export default function SearchScreen() {
             </ThemedText>
           </View>
           <Pressable
-            style={[styles.quickAddButton, { backgroundColor: colors.tint }]}
+            style={[
+              styles.cartButton,
+              { backgroundColor: inList ? colors.tint + '18' : colors.tint },
+              pending && styles.cartButtonPending,
+            ]}
             onPress={(e) => {
               e.stopPropagation?.();
-              handleQuickAdd(item);
+              handleToggleList(item);
             }}
+            disabled={pending}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel={`Add ${item.name} to shopping list`}
+            accessibilityState={{ selected: inList, disabled: pending }}
+            accessibilityLabel={
+              inList ? Strings.cart.removeLabel(item.name) : Strings.cart.addLabel(item.name)
+            }
           >
-            <ThemedText style={styles.quickAddText}>+</ThemedText>
+            <IconSymbol
+              name={inList ? 'cart.fill' : 'cart.badge.plus'}
+              size={20}
+              color={inList ? colors.tint : colors.onTint}
+            />
           </Pressable>
         </View>
       </View>
@@ -359,6 +405,7 @@ export default function SearchScreen() {
       ) : (
         <FlatList
           data={products}
+          extraData={[listIds, pendingIds]}
           renderItem={renderProduct}
           keyExtractor={(item) => item._id}
           style={{ backgroundColor: colors.backgroundSecondary }}
@@ -530,18 +577,15 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     marginTop: 2,
   },
-  quickAddButton: {
+  cartButton: {
     width: ButtonSize.small,
     height: ButtonSize.small,
     borderRadius: ButtonSize.small / 2,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  quickAddText: {
-    color: '#fff',
-    fontSize: FontSize.xl,
-    fontWeight: '700',
-    lineHeight: 22,
+  cartButtonPending: {
+    opacity: 0.5,
   },
   centered: {
     flex: 1,

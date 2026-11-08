@@ -1,99 +1,177 @@
 import Constants from 'expo-constants';
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { SettingsRow } from '@/components/settings/SettingsRow';
+import { SettingsSection } from '@/components/settings/SettingsSection';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 import { Colors } from '@/constants/Colors';
-import { FontSize, Radius, Spacing } from '@/constants/Theme';
+import { PRIVACY_POLICY_URL, Strings, SUPPORT_EMAIL } from '@/constants/Strings';
+import { ButtonSize, CardShadow, FontSize, Radius, Spacing } from '@/constants/Theme';
 import { ThemePreference, useThemePreference } from '@/contexts/ThemeContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { type Store, getStores } from '@/services/api';
 import { getProfileId } from '@/services/shoppingList';
 
+const S = Strings.profile;
+const THEME_OPTIONS: ThemePreference[] = ['light', 'dark', 'system'];
+
+type StoresState =
+  | { status: 'loading' }
+  | { status: 'error' }
+  | { status: 'success'; stores: Store[] };
+
+async function fetchStoresState(): Promise<StoresState> {
+  try {
+    return { status: 'success', stores: await getStores() };
+  } catch {
+    return { status: 'error' };
+  }
+}
+
 export default function ProfileScreen() {
-  const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
+  const colors = Colors[useColorScheme() ?? 'light'];
   const { preference, setPreference } = useThemePreference();
-  const [deviceId, setDeviceId] = useState<string>('');
+  const [deviceId, setDeviceId] = useState('');
+  const [storesState, setStoresState] = useState<StoresState>({ status: 'loading' });
+
+  const appVersion = Constants.expoConfig?.version ?? '';
 
   useEffect(() => {
-    getProfileId().then(setDeviceId);
+    fetchStoresState().then(setStoresState);
+    getProfileId()
+      .then(setDeviceId)
+      .catch(() => {});
   }, []);
 
-  const appVersion = Constants.expoConfig?.version ?? '0.0.0';
+  const retryStores = () => {
+    setStoresState({ status: 'loading' });
+    fetchStoresState().then(setStoresState);
+  };
+
+  const contactSupport = async (): Promise<void> => {
+    try {
+      await Linking.openURL(`mailto:${SUPPORT_EMAIL}`);
+    } catch {
+      Alert.alert(S.emailUnavailableTitle, S.emailUnavailableBody(SUPPORT_EMAIL));
+    }
+  };
+
+  const openPrivacyPolicy = async (): Promise<void> => {
+    try {
+      await WebBrowser.openBrowserAsync(PRIVACY_POLICY_URL);
+    } catch {
+      Alert.alert(S.linkErrorTitle, S.linkErrorBody);
+    }
+  };
+
+  const storesRowValue =
+    storesState.status === 'loading'
+      ? S.storesLoading
+      : storesState.status === 'error'
+        ? undefined
+        : String(storesState.stores.length);
 
   return (
     <ThemedView style={styles.container}>
-      <View style={styles.header}>
-        <ThemedText type="title">Profile</ThemedText>
-      </View>
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <ThemedText type="title" style={styles.title}>
+          {S.title}
+        </ThemedText>
 
-      <View style={styles.content}>
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <ThemedText style={styles.cardTitle}>Device Info</ThemedText>
-
-          <View style={styles.row}>
-            <ThemedText style={[styles.label, { color: colors.textSecondary }]}>Device ID</ThemedText>
-            <ThemedText style={styles.value} numberOfLines={1}>
-              {deviceId || 'Loading...'}
+        <View style={[styles.identityCard, { backgroundColor: colors.card }]}>
+          <IconSymbol name="person.crop.circle.fill" size={56} color={colors.tint} />
+          <View style={styles.identityText}>
+            <ThemedText style={styles.identityName}>{S.guestName}</ThemedText>
+            <ThemedText style={[styles.identitySubtitle, { color: colors.textSecondary }]}>
+              {S.guestSubtitle}
             </ThemedText>
           </View>
-
-          <View style={styles.row}>
-            <ThemedText style={[styles.label, { color: colors.textSecondary }]}>App Version</ThemedText>
-            <ThemedText style={styles.value}>{appVersion}</ThemedText>
-          </View>
-
-          <View style={styles.row}>
-            <ThemedText style={[styles.label, { color: colors.textSecondary }]}>Shopping List</ThemedText>
-            <ThemedText style={styles.value}>Stored locally + server sync</ThemedText>
-          </View>
         </View>
 
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <ThemedText style={styles.cardTitle}>Account</ThemedText>
-          <ThemedText style={[styles.placeholder, { color: colors.textSecondary }]}>
-            Sign up and subscription features coming soon. Your shopping list is currently tied to this device.
+        <SettingsSection title={S.preferencesSection}>
+          <SettingsRow
+            icon="circle.lefthalf.filled"
+            label={S.appearance}
+            accessory={
+              <View
+                style={[styles.segmented, { backgroundColor: colors.backgroundSecondary }]}
+                accessibilityRole="radiogroup"
+                accessibilityLabel={S.appearance}
+              >
+                {THEME_OPTIONS.map((option) => {
+                  const selected = preference === option;
+                  return (
+                    <Pressable
+                      key={option}
+                      onPress={() => setPreference(option)}
+                      hitSlop={{ top: Spacing.sm, bottom: Spacing.sm }}
+                      style={[styles.segment, selected && [styles.segmentActive, { backgroundColor: colors.card }]]}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected }}
+                      accessibilityLabel={S.appearanceOptions[option]}
+                    >
+                      <ThemedText
+                        style={[
+                          styles.segmentText,
+                          { color: selected ? colors.text : colors.textSecondary },
+                          selected && styles.segmentTextActive,
+                        ]}
+                      >
+                        {S.appearanceOptions[option]}
+                      </ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            }
+          />
+        </SettingsSection>
+
+        <SettingsSection title={S.supportSection}>
+          <SettingsRow icon="envelope" label={S.contactSupport} onPress={contactSupport} />
+          <SettingsRow icon="lock.shield" label={S.privacyPolicy} onPress={openPrivacyPolicy} />
+        </SettingsSection>
+
+        <SettingsSection title={S.aboutSection}>
+          <ThemedText style={[styles.aboutBody, { color: colors.textSecondary }]}>
+            {S.aboutBody}
           </ThemedText>
-        </View>
+          <SettingsRow
+            icon="storefront"
+            label={S.storesWeCompare}
+            value={storesRowValue}
+            onPress={storesState.status === 'error' ? retryStores : undefined}
+          />
+          {storesState.status === 'error' ? (
+            <ThemedText style={[styles.storeNames, { color: colors.error }]}>
+              {S.storesError}
+            </ThemedText>
+          ) : null}
+          {storesState.status === 'success' ? (
+            <ThemedText style={[styles.storeNames, { color: colors.textSecondary }]}>
+              {storesState.stores.length > 0
+                ? storesState.stores.map((s) => s.store_name).join(' · ')
+                : S.storesEmpty}
+            </ThemedText>
+          ) : null}
+          <SettingsRow icon="info.circle" label={S.version} value={appVersion} />
+        </SettingsSection>
 
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <ThemedText style={styles.cardTitle}>Settings</ThemedText>
-
-          <View style={styles.row}>
-            <ThemedText style={[styles.label, { color: colors.textSecondary }]}>Appearance</ThemedText>
-            <View style={[styles.segmented, { backgroundColor: colors.background }]}>
-              {(['light', 'dark', 'system'] as ThemePreference[]).map((option) => (
-                <Pressable
-                  key={option}
-                  onPress={() => setPreference(option)}
-                  style={[
-                    styles.segment,
-                    preference === option && [styles.segmentActive, { backgroundColor: colors.card }],
-                  ]}
-                >
-                  <ThemedText
-                    style={[
-                      styles.segmentText,
-                      { color: colors.textSecondary },
-                      preference === option && { color: colors.text, fontWeight: '600' },
-                    ]}
-                  >
-                    {option.charAt(0).toUpperCase() + option.slice(1)}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        </View>
-
-        <View style={[styles.card, { backgroundColor: colors.card }]}>
-          <ThemedText style={styles.cardTitle}>About</ThemedText>
-          <ThemedText style={[styles.placeholder, { color: colors.textSecondary }]}>
-            Brite Shopping helps you find products, compare prices across stores, and shop economically.
+        <View style={styles.footer}>
+          <ThemedText style={[styles.footerText, { color: colors.textTertiary }]}>
+            {S.disclaimer}
           </ThemedText>
+          {deviceId ? (
+            <ThemedText selectable style={[styles.footerText, { color: colors.textTertiary }]}>
+              {S.deviceId(deviceId)}
+            </ThemedText>
+          ) : null}
         </View>
-      </View>
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -102,51 +180,33 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
+  scroll: {
     paddingTop: Spacing.headerTop,
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
+    paddingBottom: Spacing.xxl * 2,
+    gap: Spacing.xl,
   },
-  content: {
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.md,
+  title: {
+    marginBottom: -Spacing.sm,
   },
-  card: {
-    borderRadius: Radius.md,
+  identityCard: {
+    ...CardShadow,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.lg,
     padding: Spacing.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
+    borderRadius: Radius.md,
   },
-  cardTitle: {
+  identityText: {
+    flex: 1,
+    gap: 2,
+  },
+  identityName: {
     fontSize: FontSize.lg,
     fontWeight: '700',
-    marginBottom: Spacing.md,
   },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e7eb',
-  },
-  label: {
+  identitySubtitle: {
     fontSize: FontSize.sm,
-    fontWeight: '500',
-  },
-  value: {
-    fontSize: FontSize.sm,
-    fontWeight: '600',
-    flexShrink: 1,
-    maxWidth: '60%',
-    textAlign: 'right',
-  },
-  placeholder: {
-    fontSize: FontSize.sm,
-    lineHeight: 20,
   },
   segmented: {
     flexDirection: 'row',
@@ -154,19 +214,39 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   segment: {
+    minHeight: ButtonSize.small - Spacing.xs,
     paddingHorizontal: Spacing.md,
-    paddingVertical: 6,
-    borderRadius: Radius.sm - 1,
+    justifyContent: 'center',
+    borderRadius: Radius.sm - 2,
   },
   segmentActive: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    ...CardShadow,
   },
   segmentText: {
-    fontSize: FontSize.xs,
+    fontSize: FontSize.sm,
     fontWeight: '500',
+  },
+  segmentTextActive: {
+    fontWeight: '600',
+  },
+  aboutBody: {
+    fontSize: FontSize.sm,
+    lineHeight: 20,
+    padding: Spacing.lg,
+  },
+  storeNames: {
+    fontSize: FontSize.sm,
+    lineHeight: 20,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+  },
+  footer: {
+    gap: Spacing.xs,
+    paddingHorizontal: Spacing.lg,
+  },
+  footerText: {
+    fontSize: FontSize.xs,
+    lineHeight: 16,
+    textAlign: 'center',
   },
 });
