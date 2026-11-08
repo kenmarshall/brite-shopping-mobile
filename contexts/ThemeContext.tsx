@@ -40,7 +40,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   const colorScheme: 'light' | 'dark' =
-    preference === 'system' ? (systemScheme ?? 'light') : preference;
+    preference === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : preference;
 
   return (
     <ThemeContext.Provider value={{ preference, setPreference, colorScheme, isLoaded }}>
