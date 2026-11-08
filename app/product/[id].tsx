@@ -17,7 +17,7 @@ import { CardShadow, FontSize, Radius, Spacing } from '@/constants/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { type Product, getProduct } from '@/services/api';
 import { addToList, isInList } from '@/services/shoppingList';
-import { formatMeasure, formatPackInfo, formatPrice, formatProductSize } from '@/utils/format';
+import { formatMeasure, formatPackInfo, formatPrice } from '@/utils/format';
 
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -85,7 +85,6 @@ export default function ProductDetailScreen() {
 
   const sortedPrices = [...product.location_prices].sort((a, b) => a.amount - b.amount);
   const lowestPrice = sortedPrices.length > 0 ? sortedPrices[0].amount : null;
-  const sizeLabel = formatProductSize(product.size);
   const packLabel = formatPackInfo(product.size);
   const measureLabel = formatMeasure(product.size);
 
