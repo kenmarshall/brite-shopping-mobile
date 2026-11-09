@@ -8,12 +8,13 @@ import { useColors } from '@/hooks/useColors';
 interface Props {
   value: string;
   onChange: (text: string) => void;
+  onSubmit: () => void;
   onScan: () => void;
 }
 
 const S = Strings.home;
 
-export function SearchField({ value, onChange, onScan }: Props) {
+export function SearchField({ value, onChange, onSubmit, onScan }: Props) {
   const colors = useColors();
   return (
     <View style={[styles.field, { backgroundColor: colors.surface, borderColor: colors.border }]}>
@@ -21,6 +22,7 @@ export function SearchField({ value, onChange, onScan }: Props) {
       <TextInput
         value={value}
         onChangeText={onChange}
+        onSubmitEditing={onSubmit}
         placeholder={S.searchPlaceholder}
         placeholderTextColor={colors.placeholderText}
         accessibilityLabel={S.searchLabel}

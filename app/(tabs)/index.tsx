@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Platform, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { RecentSearches } from '@/components/home/RecentSearches';
 import { SearchField } from '@/components/home/SearchField';
 import { ProductCard } from '@/components/product/ProductCard';
 import { ThemedText } from '@/components/ThemedText';
@@ -18,6 +19,7 @@ import { useListActions } from '@/hooks/useListActions';
 import { useShoppingList } from '@/hooks/useShoppingList';
 import { useSnackbar } from '@/hooks/useSnackbar';
 import { type Product, getAllProducts, getCategories, searchProducts } from '@/services/api';
+import { clearRecentSearches, getRecentSearches, saveRecentSearch } from '@/services/recentSearches';
 import { calculateTotal } from '@/services/shoppingList';
 import { formatPrice } from '@/utils/format';
 
@@ -43,6 +45,7 @@ export default function HomeScreen() {
   const [categories, setCategories] = useState<string[]>([]);
   const [results, setResults] = useState<Results>({ status: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
+  const [recent, setRecent] = useState<string[]>([]);
   const requestId = useRef(0);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -68,6 +71,10 @@ export default function HomeScreen() {
   }, [query, category, load]);
 
   useEffect(() => {
+    getRecentSearches().then(setRecent);
+  }, []);
+
+  useEffect(() => {
     getCategories()
       .then(setCategories)
       .catch(() => setCategories([]));
@@ -79,7 +86,21 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  const openProduct = useCallback((p: Product) => router.push({ pathname: '/product/[id]', params: { id: p._id } }), [router]);
+  // A search counts as "recent" once the shopper commits to it: submits it or opens a result.
+  const rememberSearch = useCallback(() => {
+    if (query.trim()) saveRecentSearch(recent, query).then(setRecent);
+  }, [query, recent]);
+  const openProduct = useCallback(
+    (p: Product) => {
+      rememberSearch();
+      router.push({ pathname: '/product/[id]', params: { id: p._id } });
+    },
+    [rememberSearch, router],
+  );
+  const forgetSearches = () => {
+    setRecent([]);
+    clearRecentSearches();
+  };
   const toGet = (list ?? []).filter((i) => !i.checked);
   const products = results.status === 'ready' ? results.products : [];
   const searching = query.trim().length > 0;
@@ -87,12 +108,8 @@ export default function HomeScreen() {
 
   const header = (
     <View style={[styles.header, { paddingTop: insets.top + Spacing.md }]}>
-      <View style={styles.titleBlock}>
-        <ThemedText style={[styles.eyebrow, { color: colors.textSecondary }]}>{S.eyebrow}</ThemedText>
-        <ThemedText style={styles.title} accessibilityRole="header">{S.title}</ThemedText>
-      </View>
       <View style={styles.padded}>
-        <SearchField value={query} onChange={setQuery} onScan={() => router.push('/scanner')} />
+        <SearchField value={query} onChange={setQuery} onSubmit={rememberSearch} onScan={() => router.push('/scanner')} />
       </View>
       {categories.length > 0 ? (
         <ChipRow
@@ -122,6 +139,7 @@ export default function HomeScreen() {
           <IconSymbol name="chevron.right" size={18} color={colors.onPrimaryContainer} />
         </Pressable>
       ) : null}
+      {!searching && recent.length > 0 ? <RecentSearches searches={recent} onSelect={setQuery} onClear={forgetSearches} /> : null}
       {results.status === 'ready' && products.length > 0 ? (
         <ThemedText style={[styles.section, styles.padded]} accessibilityRole="header">{sectionTitle}</ThemedText>
       ) : null}
@@ -144,6 +162,7 @@ export default function HomeScreen() {
         <ThemedText style={[styles.stateBody, { color: colors.textSecondary }]}>
           {searching ? S.noResultsBody : S.emptyCategory}
         </ThemedText>
+        {searching ? <ThemedText style={[styles.stateBody, { color: colors.textSecondary }]}>{S.coverage}</ThemedText> : null}
         {searching ? (
           <View style={styles.stateAction}>
             <Button label={S.scan} variant="secondary" icon="barcode.viewfinder" onPress={() => router.push('/scanner')} />
@@ -184,9 +203,6 @@ const styles = StyleSheet.create({
   content: { gap: Spacing.md },
   header: { gap: Spacing.lg, paddingBottom: Spacing.xs },
   padded: { paddingHorizontal: Spacing.lg },
-  titleBlock: { paddingHorizontal: Spacing.lg, gap: Spacing.xs },
-  eyebrow: { ...Type.callout },
-  title: { ...Type.display },
   listCard: {
     marginHorizontal: Spacing.lg,
     borderRadius: Radius.lg,

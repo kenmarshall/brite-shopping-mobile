@@ -32,7 +32,7 @@ React Native (Expo) mobile app for the Brite Shopping ecosystem — a price comp
 - iOS bundle ID: `com.kenmarshall.briteshopping`
 
 ## Current Screens
-- **Home** — search (debounced, with clear and scan), category chips, "Your list" summary, product cards (lowest price + where, unit price, weight items as "/ kg", add button that becomes a stepper)
+- **Home** — no headline; search first (debounced, with clear and scan), category chips, "Your list" summary, recent searches (saved on submit or when a result is opened, last 5), product cards (lowest price + where, unit price, weight items as "/ kg", add button that becomes a stepper)
 - **Product Detail** — lowest price + store as the hero (with Estimate, store count, unit price), every store's price with its age ("may be outdated" after 30 days), add-to-list with quantity stepper and Undo snackbar
 - **Tabs** — Home · Scan (opens `/scanner`, then `/scan` looks up the barcode) · List (badge = items still to get) · Profile. `add` is a hidden route reached from a scan that isn't in the catalog
 - **List** — tick items off into "In cart", quantity stepper, "Still to get" and estimated totals; removals and clears have Undo
