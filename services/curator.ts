@@ -1,4 +1,4 @@
-import { API_BASE_URL, API_KEY } from '@/services/api';
+import { API_BASE_URL, API_KEY, type Product } from '@/services/api';
 
 // Curator tools ship only in dev builds: the key lives in .env.local and is
 // never added to the EAS production environment, so production builds hide them.
@@ -27,6 +27,30 @@ export interface CuratorStore {
   latitude: number;
   longitude: number;
   distance_km?: number;
+  /** Basket items without a fresh price at this store. */
+  basket_needed?: number;
+}
+
+export type BasketStatus = 'needed' | 'outdated' | 'done';
+
+export interface BasketItem {
+  slot: string;
+  label: string;
+  status: BasketStatus;
+  product: Pick<Product, '_id' | 'name' | 'size' | 'image_url' | 'sold_by'> | null;
+  price: { amount: number; price_unit: 'kg' | 'lb' | null; seen_at: string } | null;
+}
+
+export interface BasketGroup {
+  group: string;
+  items: BasketItem[];
+}
+
+export interface StoreBasket {
+  store_id: string;
+  store_name: string;
+  summary: Record<BasketStatus | 'total', number>;
+  groups: BasketGroup[];
 }
 
 export interface CreatedProduct {
@@ -103,5 +127,17 @@ export async function recordCuratorPrice(price: {
   await curatorRequest<{ price: unknown }>('/curator/prices', {
     method: 'POST',
     body: JSON.stringify(price),
+  });
+}
+
+export async function getStoreBasket(storeId: string): Promise<StoreBasket> {
+  return curatorRequest<StoreBasket>(`/curator/basket?store_id=${encodeURIComponent(storeId)}`);
+}
+
+/** Point a basket slot at a product, e.g. one just added in store. */
+export async function linkBasketSlot(slot: string, productId: string): Promise<void> {
+  await curatorRequest<{ slot: unknown }>(`/curator/basket/${encodeURIComponent(slot)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ product_id: productId }),
   });
 }

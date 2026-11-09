@@ -56,7 +56,7 @@ export default function NewStoreScreen() {
         longitude: fix.lng,
         area: area.trim() || undefined,
       });
-      router.replace({ pathname: '/curator/scan', params: { storeId: store.store_id, storeName: store.store_name } });
+      router.replace({ pathname: '/curator/basket', params: { storeId: store.store_id, storeName: store.store_name } });
     } catch {
       setError(S.saveStoreError);
     } finally {

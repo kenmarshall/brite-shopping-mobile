@@ -19,9 +19,11 @@ interface Props {
   suggestions: Product[];
   onPick: (product: Product) => void;
   onCancel: () => void;
+  /** Label for the way out; defaults to "Scan again" for the scan flow. */
+  cancelLabel?: string;
 }
 
-export function ProductMatcher({ suggestedName, suggestions, onPick, onCancel }: Props) {
+export function ProductMatcher({ suggestedName, suggestions, onPick, onCancel, cancelLabel = S.scanAgain }: Props) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const [query, setQuery] = useState(suggestedName ?? '');
   const [results, setResults] = useState<Product[]>(suggestions);
@@ -114,7 +116,7 @@ export function ProductMatcher({ suggestedName, suggestions, onPick, onCancel }:
       </ScrollView>
       <View style={styles.actions}>
         <Pressable onPress={onCancel} style={styles.secondary} accessibilityRole="button">
-          <ThemedText style={[styles.link, { color: colors.tint }]}>{S.scanAgain}</ThemedText>
+          <ThemedText style={[styles.link, { color: colors.tint }]}>{cancelLabel}</ThemedText>
         </Pressable>
         <Pressable onPress={() => setCreating(true)} style={[styles.primary, { backgroundColor: colors.backgroundSecondary }]} accessibilityRole="button">
           <ThemedText style={[styles.primaryText, { color: colors.tint }]}>{S.createProduct}</ThemedText>

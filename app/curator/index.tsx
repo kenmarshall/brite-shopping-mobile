@@ -66,7 +66,7 @@ export default function PickStoreScreen() {
   }, [query, position, load]);
 
   const openStore = (store: CuratorStore) =>
-    router.push({ pathname: '/curator/scan', params: { storeId: store.store_id, storeName: store.store_name } });
+    router.push({ pathname: '/curator/basket', params: { storeId: store.store_id, storeName: store.store_name } });
 
   return (
     <ThemedView style={[styles.screen, { paddingTop: insets.top + Spacing.sm }]}>

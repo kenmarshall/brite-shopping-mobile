@@ -18,7 +18,9 @@ interface Props {
 export function StoreRow({ store, onPress }: Props) {
   const colors = Colors[useColorScheme() ?? 'light'];
   const typeLabel = store.type ? S.storeTypes[store.type as keyof typeof S.storeTypes] ?? store.type : null;
-  const meta = [store.area, typeLabel].filter(Boolean).join(' · ');
+  const meta = [store.area, typeLabel, store.basket_needed != null ? S.toPrice(store.basket_needed) : null]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <Pressable

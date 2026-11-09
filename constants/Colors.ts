@@ -29,6 +29,8 @@ const light = {
   placeholder: '#EAF4F1',
   placeholderIcon: '#3F7F6E',
   placeholderText: '#6B7884',
+  // Dims the screen behind a bottom sheet
+  backdrop: 'rgba(15, 27, 36, 0.4)',
 };
 
 type Palette = typeof light;
@@ -56,6 +58,7 @@ const dark: Palette = {
   placeholder: '#1A2A26',
   placeholderIcon: '#7FC4B0',
   placeholderText: '#7D8A93',
+  backdrop: 'rgba(0, 0, 0, 0.6)',
 };
 
 function withLegacyNames(p: Palette) {
