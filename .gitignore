@@ -39,3 +39,7 @@ yarn-error.*
 *.tsbuildinfo
 
 app-example
+
+# EAS local signing files (never commit)
+credentials.json
+credentials/
