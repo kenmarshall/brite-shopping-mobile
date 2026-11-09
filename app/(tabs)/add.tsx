@@ -693,7 +693,7 @@ const styles = StyleSheet.create({
   barcodeText: {
     flex: 1,
     fontSize: FontSize.sm,
-    fontFamily: 'SpaceMono',
+    fontVariant: ['tabular-nums'],
     fontWeight: '600',
   },
   captureRow: {

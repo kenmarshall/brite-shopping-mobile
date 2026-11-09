@@ -670,7 +670,7 @@ const styles = StyleSheet.create({
   },
   barcodeLabel: {
     fontSize: FontSize.sm,
-    fontFamily: 'SpaceMono',
+    fontVariant: ['tabular-nums'],
     marginTop: 2,
   },
   linkInstructions: {

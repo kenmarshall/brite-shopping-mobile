@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useState } from 'react';
-import { Appearance, useColorScheme as useRNColorScheme } from 'react-native';
+import { Appearance, Platform, useColorScheme as useRNColorScheme } from 'react-native';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 
@@ -37,7 +37,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Apply the choice to native UI too (keyboard, alerts, blur, in-app browser).
   // 'auto' removes the override so the device setting applies again.
   useEffect(() => {
-    Appearance.setColorScheme(preference === 'system' ? 'auto' : preference);
+    // Native only: react-native-web's Appearance has no setter.
+    if (Platform.OS !== 'web') Appearance.setColorScheme(preference === 'system' ? 'auto' : preference);
   }, [preference]);
 
   const setPreference = (pref: ThemePreference) => {

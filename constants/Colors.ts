@@ -1,41 +1,78 @@
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#4DC9F6';
+// Design system v1: one teal brand color, a quiet neutral ground, and color
+// reserved for meaning (green = lowest price, amber = may be outdated).
+// Legacy names (tint, card, success, error) map onto the semantic palette so
+// screens not yet redesigned pick up the new values.
+
+const light = {
+  // Brand
+  primary: '#0A7EA4',
+  onPrimary: '#FFFFFF',
+  primaryStrong: '#086483',
+  primaryContainer: '#E3F3F9',
+  onPrimaryContainer: '#054A61',
+  // Neutrals
+  text: '#0F1B24',
+  textSecondary: '#4E5D6A',
+  textTertiary: '#6B7884',
+  background: '#F5F7F8',
+  backgroundSecondary: '#E9EDF0',
+  surface: '#FFFFFF',
+  border: '#E3E8EC',
+  // Meaning
+  positive: '#15803D',
+  positiveContainer: '#E7F6EC',
+  caution: '#92400E',
+  cautionContainer: '#FEF3C7',
+  danger: '#B42318',
+  dangerContainer: '#FDECEA',
+  // Product image placeholder
+  placeholder: '#EAF4F1',
+  placeholderIcon: '#3F7F6E',
+  placeholderText: '#6B7884',
+};
+
+type Palette = typeof light;
+
+const dark: Palette = {
+  primary: '#4DC9F6',
+  // Near-black on the light dark-mode primary; white would be about 1.9:1.
+  onPrimary: '#04222E',
+  primaryStrong: '#7FD6F8',
+  primaryContainer: '#0E3443',
+  onPrimaryContainer: '#BDE9FA',
+  text: '#ECF1F4',
+  textSecondary: '#A9B4BC',
+  textTertiary: '#7D8A93',
+  background: '#0E1316',
+  backgroundSecondary: '#222A2F',
+  surface: '#171D21',
+  border: '#2A343A',
+  positive: '#4ADE80',
+  positiveContainer: '#0F2E1B',
+  caution: '#FBBF24',
+  cautionContainer: '#3A2A0C',
+  danger: '#F97066',
+  dangerContainer: '#3B1512',
+  placeholder: '#1A2A26',
+  placeholderIcon: '#7FC4B0',
+  placeholderText: '#7D8A93',
+};
+
+function withLegacyNames(p: Palette) {
+  return {
+    ...p,
+    tint: p.primary,
+    onTint: p.onPrimary,
+    icon: p.textSecondary,
+    tabIconDefault: p.textTertiary,
+    tabIconSelected: p.primary,
+    card: p.surface,
+    error: p.danger,
+    success: p.positive,
+  };
+}
 
 export const Colors = {
-  light: {
-    text: '#11181C',
-    textSecondary: '#687076',
-    textTertiary: '#889096',
-    background: '#fff',
-    backgroundSecondary: '#F0F0F0',
-    tint: tintColorLight,
-    onTint: '#fff',
-    icon: '#687076',
-    tabIconDefault: '#687076',
-    tabIconSelected: tintColorLight,
-    card: '#fff',
-    border: '#E0E0E0',
-    error: '#D32F2F',
-    success: '#4CAF50',
-    placeholder: '#E0E0E0',
-    placeholderText: '#889096',
-  },
-  dark: {
-    text: '#ECEDEE',
-    textSecondary: '#9BA1A6',
-    textTertiary: '#6E7681',
-    background: '#151718',
-    backgroundSecondary: '#2A2D2F',
-    tint: tintColorDark,
-    onTint: '#0B1A20',
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: tintColorDark,
-    card: '#1E2022',
-    border: '#2A2D2F',
-    error: '#EF5350',
-    success: '#66BB6A',
-    placeholder: '#2A2D2F',
-    placeholderText: '#6E7681',
-  },
+  light: withLegacyNames(light),
+  dark: withLegacyNames(dark),
 };
