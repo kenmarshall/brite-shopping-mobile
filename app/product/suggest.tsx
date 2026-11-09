@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -37,24 +37,27 @@ export default function SuggestCorrectionScreen() {
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
-  const fetchProduct = useCallback(async (): Promise<void> => {
-    if (!id) return;
-    try {
-      const product = await getProduct(id);
-      setName(product.name);
-      setBrand(product.brand ?? '');
-      setLoad({ status: 'ready', product });
-    } catch {
-      setLoad({ status: 'error' });
-    }
-  }, [id]);
+  const [attempt, setAttempt] = useState(0);
 
+  // Load (and on retry, reload) the product; the form starts from its current name and brand.
   useEffect(() => {
-    fetchProduct();
-  }, [fetchProduct]);
+    if (!id) return;
+    let active = true;
+    getProduct(id)
+      .then((product) => {
+        if (!active) return;
+        setName(product.name);
+        setBrand(product.brand ?? '');
+        setLoad({ status: 'ready', product });
+      })
+      .catch(() => active && setLoad({ status: 'error' }));
+    return () => {
+      active = false;
+    };
+  }, [id, attempt]);
 
   if (load.status === 'loading') return <StateView />;
-  if (load.status === 'error') return <StateView title={S.title} body={S.loadError} action={{ label: S.retry, onPress: () => { setLoad({ status: 'loading' }); fetchProduct(); } }} />;
+  if (load.status === 'error') return <StateView title={S.title} body={S.loadError} action={{ label: S.retry, onPress: () => { setLoad({ status: 'loading' }); setAttempt((n) => n + 1); } }} />;
   if (load.status === 'sent') {
     return <StateView title={S.sentTitle} body={S.sentBody} action={{ label: S.backToProduct, onPress: () => router.back() }} />;
   }
