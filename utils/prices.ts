@@ -39,6 +39,16 @@ export function formatAge(days: number | null): string | null {
   return A.months(Math.floor(days / 30));
 }
 
+/**
+ * Store prices with their sale unit filled in. Scraped prices for products sold by weight
+ * ("Yam Yellow Local KG") are per kg/lb but don't carry the unit themselves.
+ */
+export function pricesWithUnits(product: Pick<Product, 'location_prices' | 'sold_by'>): LocationPrice[] {
+  const weightUnit = product.sold_by?.kind === 'weight' ? product.sold_by.unit : null;
+  if (!weightUnit) return product.location_prices;
+  return product.location_prices.map((p) => (p.price_unit ? p : { ...p, price_unit: weightUnit }));
+}
+
 export function summarizePrices(prices: LocationPrice[], now: Date = new Date()): PriceSummary {
   if (prices.length === 0) return { rows: [], lowest: null, savings: null };
   const sorted = [...prices].sort((a, b) => a.amount - b.amount);

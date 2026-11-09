@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 import type { LocationPrice } from '@/services/api';
-import { daysSince, formatAge, summarizePrices, unitPrice } from '@/utils/prices';
+import { daysSince, formatAge, pricesWithUnits, summarizePrices, unitPrice } from '@/utils/prices';
 
 const NOW = new Date('2026-11-08T12:00:00Z');
 
@@ -94,5 +94,16 @@ describe('unitPrice', () => {
     expect(unitPrice(100, { value: null, unit: 'g' })).toBeNull();
     expect(unitPrice(100, { value: 1, unit: 'count' })).toBeNull();
     expect(unitPrice(100, { value: 500, unit: 'mg' })).toBeNull();
+  });
+});
+
+describe('pricesWithUnits', () => {
+  it('marks scraped prices of weight-sold products as per kg or lb', () => {
+    const prices = pricesWithUnits({ sold_by: { kind: 'weight', unit: 'kg' }, location_prices: [price({}), price({ price_unit: 'lb' })] });
+    expect(prices.map((p) => p.price_unit)).toEqual(['kg', 'lb']);
+  });
+  it('leaves items sold each alone', () => {
+    const list = [price({})];
+    expect(pricesWithUnits({ sold_by: { kind: 'each', unit: null }, location_prices: list })).toBe(list);
   });
 });

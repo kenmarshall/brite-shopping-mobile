@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 
 import type { SnackbarMessage } from '@/components/ui/Snackbar';
 
-interface SnackbarState {
+export interface SnackbarState {
   message: SnackbarMessage | null;
   /** Shows a message, with an action button when both label and handler are given. */
   show: (text: string, action?: { label: string; onPress: () => void }) => void;

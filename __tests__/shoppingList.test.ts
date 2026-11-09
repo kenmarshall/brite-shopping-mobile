@@ -64,4 +64,11 @@ describe('shopping list', () => {
     await List.clearList();
     expect(seen).toEqual([1, 2]);
   });
+
+  it('setQuantity adds, updates and removes', async () => {
+    expect((await List.setQuantity(beans, 3))[0].quantity).toBe(3);
+    expect((await List.setQuantity(beans, 1))[0].quantity).toBe(1);
+    expect(await List.setQuantity(beans, 0)).toEqual([]);
+    expect(await List.setQuantity(rice, 0)).toEqual([]);
+  });
 });

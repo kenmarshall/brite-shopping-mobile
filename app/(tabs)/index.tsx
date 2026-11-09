@@ -1,612 +1,207 @@
-import * as Haptics from 'expo-haptics';
-import { Image } from 'expo-image';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useBottomTabBarHeight } from 'expo-router/js-tabs';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  LayoutAnimation,
-  Modal,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  UIManager,
-  Platform,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, Platform, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import BarcodeScanner from '@/components/BarcodeScanner';
+import { SearchField } from '@/components/home/SearchField';
+import { ProductCard } from '@/components/product/ProductCard';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import { Button } from '@/components/ui/Button';
+import { ChipRow } from '@/components/ui/ChipRow';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import { Colors } from '@/constants/Colors';
+import { Snackbar } from '@/components/ui/Snackbar';
 import { Strings } from '@/constants/Strings';
-import { ButtonSize, CardShadow, FontSize, Radius, Spacing } from '@/constants/Theme';
-import { useColorScheme } from '@/hooks/useColorScheme';
-import {
-  type Product,
-  type Store,
-  getAllProducts,
-  getCategories,
-  getStores,
-  searchProducts,
-} from '@/services/api';
-import { addToList, getShoppingList, removeFromList } from '@/services/shoppingList';
-import { formatMeasure, formatPackInfo, formatPrice, formatStoreCount } from '@/utils/format';
+import { Fonts, Radius, Spacing, Type } from '@/constants/Theme';
+import { useColors } from '@/hooks/useColors';
+import { useListActions } from '@/hooks/useListActions';
+import { useShoppingList } from '@/hooks/useShoppingList';
+import { useSnackbar } from '@/hooks/useSnackbar';
+import { type Product, getAllProducts, getCategories, searchProducts } from '@/services/api';
+import { calculateTotal } from '@/services/shoppingList';
+import { formatPrice } from '@/utils/format';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+const S = Strings.home;
+const ALL = '__all__';
+const SEARCH_DEBOUNCE_MS = 400;
 
-const CARD_HEIGHT = 108;
-const IMAGE_SIZE = CARD_HEIGHT;
+type Results = { status: 'loading' } | { status: 'error' } | { status: 'ready'; products: Product[] };
 
-export default function SearchScreen() {
-  const [query, setQuery] = useState('');
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [stores, setStores] = useState<Store[]>([]);
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [activeStore, setActiveStore] = useState<string | null>(null);
-  const [filtersVisible, setFiltersVisible] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [scannerVisible, setScannerVisible] = useState(false);
-  const [listIds, setListIds] = useState<Set<string>>(new Set());
-  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
-  const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
+export default function HomeScreen() {
   const router = useRouter();
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const insets = useSafeAreaInsets();
+  const colors = useColors();
+  // The tab bar floats over content only on iOS (see the tabs layout).
+  const tabBarHeight = useBottomTabBarHeight();
+  const barInset = Platform.OS === 'ios' ? tabBarHeight : 0;
+  const snackbar = useSnackbar();
+  const listActions = useListActions(snackbar, () => router.push('/list'));
+  const list = useShoppingList();
 
-  const hasActiveFilter = activeCategory !== null || activeStore !== null;
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState(ALL);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [results, setResults] = useState<Results>({ status: 'loading' });
+  const [refreshing, setRefreshing] = useState(false);
+  const requestId = useRef(0);
+  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchProducts = useCallback(
-    async (searchQuery: string, category?: string | null, storeId?: string | null) => {
-      setLoading(true);
-      setError(null);
-      try {
-        let results: Product[];
-        const filters: { category?: string; store_id?: string } = {};
-        if (category) filters.category = category;
-        if (storeId) filters.store_id = storeId;
-
-        if (searchQuery.trim() || Object.keys(filters).length > 0) {
-          results = await searchProducts(searchQuery, filters);
-        } else {
-          results = await getAllProducts();
-        }
-        setProducts(results);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load products');
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
+  /** Loads products for a query and category; responses to superseded requests are ignored. */
+  const load = useCallback(async (q: string, cat: string): Promise<void> => {
+    const id = ++requestId.current;
+    setResults((r) => (r.status === 'ready' ? r : { status: 'loading' }));
+    try {
+      const filters = cat === ALL ? {} : { category: cat };
+      const products = q.trim() || cat !== ALL ? await searchProducts(q, filters) : await getAllProducts();
+      if (id === requestId.current) setResults({ status: 'ready', products });
+    } catch {
+      if (id === requestId.current) setResults({ status: 'error' });
+    }
+  }, []);
 
   useEffect(() => {
-    fetchProducts('');
+    if (debounce.current) clearTimeout(debounce.current);
+    debounce.current = setTimeout(() => load(query, category), query ? SEARCH_DEBOUNCE_MS : 0);
+    return () => {
+      if (debounce.current) clearTimeout(debounce.current);
+    };
+  }, [query, category, load]);
+
+  useEffect(() => {
     getCategories()
       .then(setCategories)
-      .catch(() => {});
-    getStores()
-      .then(setStores)
-      .catch(() => {});
-  }, [fetchProducts]);
+      .catch(() => setCategories([]));
+  }, []);
 
-  const handleSearch = (text: string) => {
-    setQuery(text);
-    if (text.trim()) {
-      setActiveCategory(null);
-    }
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(
-      () => fetchProducts(text, text.trim() ? null : activeCategory, activeStore),
-      400,
-    );
-  };
-
-  const handleCategoryPress = (category: string) => {
-    const next = activeCategory === category ? null : category;
-    setActiveCategory(next);
-    setQuery('');
-    fetchProducts('', next, activeStore);
-  };
-
-  const handleStorePress = (storeId: string) => {
-    const next = activeStore === storeId ? null : storeId;
-    setActiveStore(next);
-    fetchProducts(query, activeCategory, next);
-  };
-
-  const handleRefresh = useCallback(async () => {
+  const refresh = async (): Promise<void> => {
     setRefreshing(true);
-    await Promise.all([
-      fetchProducts(query, activeCategory, activeStore),
-      getCategories().then(setCategories).catch(() => {}),
-      getStores().then(setStores).catch(() => {}),
-    ]);
+    await load(query, category);
     setRefreshing(false);
-  }, [fetchProducts, query, activeCategory, activeStore]);
-
-  const toggleFilters = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setFiltersVisible((v) => !v);
   };
 
-  // Keep cart buttons in sync with changes made on the List tab
-  useFocusEffect(
-    useCallback(() => {
-      getShoppingList()
-        .then((list) => setListIds(new Set(list.map((i) => i.productId))))
-        .catch(() => {});
-    }, []),
+  const openProduct = useCallback((p: Product) => router.push({ pathname: '/product/[id]', params: { id: p._id } }), [router]);
+  const toGet = (list ?? []).filter((i) => !i.checked);
+  const products = results.status === 'ready' ? results.products : [];
+  const searching = query.trim().length > 0;
+  const sectionTitle = searching ? S.results(products.length) : category === ALL ? S.browse : category;
+
+  const header = (
+    <View style={[styles.header, { paddingTop: insets.top + Spacing.md }]}>
+      <View style={styles.titleBlock}>
+        <ThemedText style={[styles.eyebrow, { color: colors.textSecondary }]}>{S.eyebrow}</ThemedText>
+        <ThemedText style={styles.title} accessibilityRole="header">{S.title}</ThemedText>
+      </View>
+      <View style={styles.padded}>
+        <SearchField value={query} onChange={setQuery} onScan={() => router.push('/scanner')} />
+      </View>
+      {categories.length > 0 ? (
+        <ChipRow
+          options={[ALL, ...categories].map((c) => ({
+            key: c,
+            label: c === ALL ? S.all : c,
+            accessibilityLabel: S.categoryLabel(c === ALL ? S.all : c),
+          }))}
+          selected={category}
+          onSelect={setCategory}
+        />
+      ) : null}
+      {!searching && toGet.length > 0 ? (
+        <Pressable
+          onPress={() => router.push('/list')}
+          style={({ pressed }) => [styles.listCard, { backgroundColor: colors.primaryContainer }, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel={S.openList}
+        >
+          <IconSymbol name="cart.fill" size={22} color={colors.onPrimaryContainer} />
+          <View style={styles.listText}>
+            <ThemedText style={[styles.listTitle, { color: colors.onPrimaryContainer }]}>{S.yourList(toGet.length)}</ThemedText>
+            <ThemedText style={[styles.listMeta, { color: colors.onPrimaryContainer }]}>
+              {S.listEstimate(formatPrice(calculateTotal(toGet)))}
+            </ThemedText>
+          </View>
+          <IconSymbol name="chevron.right" size={18} color={colors.onPrimaryContainer} />
+        </Pressable>
+      ) : null}
+      {results.status === 'ready' && products.length > 0 ? (
+        <ThemedText style={[styles.section, styles.padded]} accessibilityRole="header">{sectionTitle}</ThemedText>
+      ) : null}
+    </View>
   );
 
-  const handleToggleList = async (item: Product) => {
-    if (pendingIds.has(item._id)) return;
-    setPendingIds((prev) => new Set(prev).add(item._id));
-    const wasInList = listIds.has(item._id);
-    try {
-      const list = wasInList
-        ? await removeFromList(item._id)
-        : await addToList({
-            productId: item._id,
-            name: item.name,
-            estimatedPrice: item.estimated_price,
-            imageUrl: item.image_url,
-          });
-      setListIds(new Set(list.map((i) => i.productId)));
-      Haptics.impactAsync(
-        wasInList ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium,
-      );
-    } catch {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setPendingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(item._id);
-        return next;
-      });
-    }
-  };
-
-  const renderProduct = ({ item }: { item: Product }) => {
-    const packLabel = formatPackInfo(item.size);
-    const measureLabel = formatMeasure(item.size);
-    const inList = listIds.has(item._id);
-    const pending = pendingIds.has(item._id);
-    return (
-      <Pressable
-        style={[styles.card, { backgroundColor: colors.card }]}
-        onPress={() =>
-          router.push({ pathname: '/product/[id]', params: { id: item._id } })
-        }
-        accessibilityRole="button"
-        accessibilityLabel={`${item.name}${packLabel ? `, ${packLabel}` : ''}${measureLabel ? `, ${measureLabel}` : ''}, ${formatPrice(item.estimated_price)}`}
-      >
-      <View style={[styles.imageContainer, { backgroundColor: colors.placeholder }]}>
-        {item.image_url && !item.image_url.startsWith('data:image/svg') ? (
-          <Image
-            source={{ uri: item.image_url }}
-            style={styles.productImage}
-            contentFit="cover"
-          />
-        ) : (
-          <IconSymbol name="photo" size={28} color={colors.placeholderText} />
-        )}
+  const empty =
+    results.status === 'loading' ? (
+      <ActivityIndicator style={styles.state} size="large" color={colors.primary} />
+    ) : results.status === 'error' ? (
+      <View style={styles.state}>
+        <ThemedText style={[styles.stateBody, { color: colors.textSecondary }]}>{S.loadError}</ThemedText>
+        <View style={styles.stateAction}>
+          <Button label={S.retry} variant="secondary" onPress={() => load(query, category)} />
+        </View>
       </View>
-      <View style={styles.cardContent}>
-        <ThemedText style={styles.productName} numberOfLines={1}>
-          {item.name}
+    ) : (
+      <View style={styles.state}>
+        {searching ? <ThemedText style={styles.stateTitle}>{S.noResultsTitle(query.trim())}</ThemedText> : null}
+        <ThemedText style={[styles.stateBody, { color: colors.textSecondary }]}>
+          {searching ? S.noResultsBody : S.emptyCategory}
         </ThemedText>
-        <View style={styles.sizeRow}>
-          {packLabel ? (
-            <View style={[styles.packBadge, { backgroundColor: colors.tint + '18' }]}>
-              <ThemedText style={[styles.packBadgeText, { color: colors.tint }]}>
-                {packLabel}
-              </ThemedText>
-            </View>
-          ) : null}
-          {measureLabel ? (
-            <ThemedText style={[styles.sizeLabel, { color: colors.textSecondary }]}>
-              {measureLabel}
-            </ThemedText>
-          ) : null}
-          {!packLabel && !measureLabel && (
-            <ThemedText style={[styles.sizeLabel, { color: 'transparent' }]}>{'\u00A0'}</ThemedText>
-          )}
-        </View>
-        <View style={styles.priceRow}>
-          <View>
-            <ThemedText style={[styles.price, { color: colors.tint }]}>
-              {formatPrice(item.estimated_price)}
-            </ThemedText>
-            <ThemedText style={[styles.storeCount, { color: colors.textSecondary }]}>
-              {formatStoreCount(item.location_prices.length)}
-            </ThemedText>
+        {searching ? (
+          <View style={styles.stateAction}>
+            <Button label={S.scan} variant="secondary" icon="barcode.viewfinder" onPress={() => router.push('/scanner')} />
           </View>
-          <Pressable
-            style={[
-              styles.cartButton,
-              { backgroundColor: inList ? colors.tint + '18' : colors.tint },
-              pending && styles.cartButtonPending,
-            ]}
-            onPress={(e) => {
-              e.stopPropagation?.();
-              handleToggleList(item);
-            }}
-            disabled={pending}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityState={{ selected: inList, disabled: pending }}
-            accessibilityLabel={
-              inList ? Strings.cart.removeLabel(item.name) : Strings.cart.addLabel(item.name)
-            }
-          >
-            <IconSymbol
-              name={inList ? 'cart.fill' : 'cart.badge.plus'}
-              size={20}
-              color={inList ? colors.tint : colors.onTint}
-            />
-          </Pressable>
-        </View>
+        ) : null}
       </View>
-      </Pressable>
     );
-  };
 
   return (
-    <ThemedView style={styles.container}>
-      <View style={styles.header}>
-        <ThemedText type="title" style={styles.headerTitle}>
-          Brite Shopping
-        </ThemedText>
-        <View style={styles.searchRow}>
-          <TextInput
-            style={[
-              styles.searchInput,
-              {
-                backgroundColor: colors.backgroundSecondary,
-                color: colors.text,
-              },
-            ]}
-            placeholder="Search products, brands, categories..."
-            placeholderTextColor={colors.icon}
-            value={query}
-            onChangeText={handleSearch}
-            autoCapitalize="none"
-            autoCorrect={false}
-            accessibilityLabel="Search products"
-          />
-          <Pressable
-            onPress={() => setScannerVisible(true)}
-            style={[styles.filterButton, { backgroundColor: colors.backgroundSecondary }]}
-            accessibilityRole="button"
-            accessibilityLabel="Scan barcode"
-          >
-            <IconSymbol name="barcode.viewfinder" size={20} color={colors.icon} />
-          </Pressable>
-          <Pressable
-            onPress={toggleFilters}
-            style={[
-              styles.filterButton,
-              { backgroundColor: hasActiveFilter ? colors.tint : colors.backgroundSecondary },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Toggle filters"
-            accessibilityState={{ expanded: filtersVisible }}
-          >
-            <IconSymbol
-              name="line.3.horizontal.decrease"
-              size={20}
-              color={hasActiveFilter ? '#fff' : colors.icon}
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <FlatList
+        data={products}
+        keyExtractor={(p) => p._id}
+        renderItem={({ item }) => (
+          <View style={styles.padded}>
+            <ProductCard
+              product={item}
+              quantity={listActions.quantityOf(item._id)}
+              onOpen={openProduct}
+              onQuantity={listActions.setProductQuantity}
             />
-            {hasActiveFilter && <View style={styles.filterDot} />}
-          </Pressable>
-        </View>
-        {filtersVisible && (
-          <View style={styles.filterPanel}>
-            {categories.length > 0 && (
-              <View>
-                <ThemedText style={[styles.filterSectionLabel, { color: colors.textSecondary }]}>Category</ThemedText>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.chipContent}
-                >
-                  {categories.map((cat) => (
-                    <Pressable
-                      key={cat}
-                      style={[
-                        styles.chip,
-                        activeCategory === cat
-                          ? { backgroundColor: colors.tint }
-                          : { backgroundColor: colors.backgroundSecondary },
-                      ]}
-                      onPress={() => handleCategoryPress(cat)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Filter by ${cat}`}
-                      accessibilityState={{ selected: activeCategory === cat }}
-                    >
-                      <ThemedText
-                        style={[
-                          styles.chipText,
-                          activeCategory === cat && styles.chipTextActive,
-                        ]}
-                      >
-                        {cat}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-            {stores.length > 0 && (
-              <View>
-                <ThemedText style={[styles.filterSectionLabel, { color: colors.textSecondary }]}>Store</ThemedText>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.chipContent}
-                >
-                  {stores.map((store) => (
-                    <Pressable
-                      key={store.store_id}
-                      style={[
-                        styles.chip,
-                        activeStore === store.store_id
-                          ? { backgroundColor: colors.success }
-                          : { backgroundColor: colors.backgroundSecondary },
-                      ]}
-                      onPress={() => handleStorePress(store.store_id)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Filter by ${store.store_name}`}
-                      accessibilityState={{ selected: activeStore === store.store_id }}
-                    >
-                      <ThemedText
-                        style={[
-                          styles.chipText,
-                          activeStore === store.store_id && styles.chipTextActive,
-                        ]}
-                      >
-                        {store.store_name}
-                      </ThemedText>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
           </View>
         )}
-      </View>
-
-      {loading && products.length === 0 ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={colors.tint} />
-        </View>
-      ) : error ? (
-        <View style={styles.centered}>
-          <ThemedText style={[styles.errorText, { color: colors.error }]}>{error}</ThemedText>
-          <Pressable
-            onPress={() => fetchProducts(query, activeCategory, activeStore)}
-            style={[styles.retryButton, { backgroundColor: colors.tint }]}
-            accessibilityRole="button"
-            accessibilityLabel="Retry loading products"
-          >
-            <ThemedText style={styles.retryText}>Retry</ThemedText>
-          </Pressable>
-        </View>
-      ) : (
-        <FlatList
-          data={products}
-          extraData={[listIds, pendingIds]}
-          renderItem={renderProduct}
-          keyExtractor={(item) => item._id}
-          style={{ backgroundColor: colors.backgroundSecondary }}
-          contentContainerStyle={styles.list}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor={colors.tint}
-              colors={[colors.tint]}
-            />
-          }
-          ListEmptyComponent={
-            <View style={styles.centered}>
-              <ThemedText style={[styles.emptyText, { color: colors.textSecondary }]}>
-                {query || activeCategory || activeStore
-                  ? 'No products found'
-                  : 'No products available'}
-              </ThemedText>
-            </View>
-          }
-        />
-      )}
-
-      <Modal visible={scannerVisible} animationType="slide" presentationStyle="fullScreen">
-        <BarcodeScanner
-          onScanned={(barcodeValue) => {
-            setScannerVisible(false);
-            router.push({ pathname: '/scan', params: { barcode: barcodeValue } });
-          }}
-          onClose={() => setScannerVisible(false)}
-        />
-      </Modal>
-    </ThemedView>
+        ListHeaderComponent={header}
+        ListEmptyComponent={empty}
+        contentContainerStyle={[styles.content, { paddingBottom: barInset + Spacing.xxl }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary} colors={[colors.primary]} />}
+      />
+      <Snackbar message={snackbar.message} onDismiss={snackbar.dismiss} bottom={barInset + Spacing.sm} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    paddingTop: Spacing.headerTop,
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.sm,
-  },
-  headerTitle: {
-    marginBottom: Spacing.md,
-  },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  searchInput: {
-    flex: 1,
-    height: ButtonSize.touch,
-    borderRadius: Radius.sm,
-    paddingHorizontal: Spacing.lg,
-    fontSize: FontSize.md,
-  },
-  filterButton: {
-    width: ButtonSize.touch,
-    height: ButtonSize.touch,
-    borderRadius: Radius.sm,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  filterDot: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#fff',
-  },
-  filterPanel: {
-    marginTop: Spacing.md,
-    gap: Spacing.sm,
-  },
-  filterSectionLabel: {
-    fontSize: FontSize.xs,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: Spacing.xs,
-  },
-  chipContent: {
-    gap: Spacing.sm,
-    paddingRight: Spacing.sm,
-  },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+  screen: { flex: 1 },
+  content: { gap: Spacing.md },
+  header: { gap: Spacing.lg, paddingBottom: Spacing.xs },
+  padded: { paddingHorizontal: Spacing.lg },
+  titleBlock: { paddingHorizontal: Spacing.lg, gap: Spacing.xs },
+  eyebrow: { ...Type.callout },
+  title: { ...Type.display },
+  listCard: {
+    marginHorizontal: Spacing.lg,
     borderRadius: Radius.lg,
-  },
-  chipText: {
-    fontSize: FontSize.sm,
-    fontWeight: '500',
-  },
-  chipTextActive: {
-    color: '#fff',
-  },
-  list: {
     padding: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: Spacing.md,
-    paddingBottom: 152,
   },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: Radius.md,
-    overflow: 'hidden',
-    paddingLeft: Spacing.md,
-    ...CardShadow,
-  },
-  imageContainer: {
-    width: IMAGE_SIZE,
-    height: IMAGE_SIZE,
-    borderRadius: Radius.sm,
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  productImage: {
-    width: IMAGE_SIZE,
-    height: IMAGE_SIZE,
-  },
-  cardContent: {
-    flex: 1,
-    padding: Spacing.md,
-    justifyContent: 'center',
-  },
-  productName: {
-    fontSize: FontSize.md,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  sizeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: Spacing.xs,
-  },
-  packBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: Radius.sm,
-  },
-  packBadgeText: {
-    fontSize: FontSize.xs,
-    fontWeight: '600',
-  },
-  sizeLabel: {
-    fontSize: FontSize.xs,
-    fontWeight: '500',
-  },
-  priceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  price: {
-    fontSize: FontSize.lg,
-    fontWeight: '700',
-  },
-  storeCount: {
-    fontSize: FontSize.xs,
-    marginTop: 2,
-  },
-  cartButton: {
-    width: ButtonSize.small,
-    height: ButtonSize.small,
-    borderRadius: ButtonSize.small / 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cartButtonPending: {
-    opacity: 0.5,
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: Spacing.xl,
-  },
-  errorText: {
-    textAlign: 'center',
-    marginBottom: Spacing.md,
-  },
-  retryButton: {
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.sm,
-  },
-  retryText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  emptyText: {
-    fontSize: FontSize.md,
-  },
+  pressed: { opacity: 0.85 },
+  listText: { flex: 1 },
+  listTitle: { ...Type.headline },
+  listMeta: { ...Type.callout },
+  section: { ...Type.section, marginBottom: -Spacing.xs },
+  state: { alignItems: 'center', padding: Spacing.xxl, gap: Spacing.sm },
+  stateTitle: { ...Type.headline, fontFamily: Fonts.semibold, textAlign: 'center' },
+  stateBody: { ...Type.body, textAlign: 'center' },
+  stateAction: { flexDirection: 'row', alignSelf: 'stretch', marginTop: Spacing.md },
 });

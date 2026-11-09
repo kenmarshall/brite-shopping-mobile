@@ -149,6 +149,20 @@ export async function updateQuantity(
   return updated;
 }
 
+/** Sets a product's quantity, adding it when missing; 0 removes it. */
+export async function setQuantity(
+  item: Omit<ShoppingListItem, 'quantity' | 'addedAt'>,
+  quantity: number,
+): Promise<ShoppingList> {
+  const list = await _load();
+  if (quantity > 0 && !list.some((i) => i.productId === item.productId)) {
+    const updated = [...list, { ...item, quantity, addedAt: new Date().toISOString() }];
+    await _save(updated);
+    return updated;
+  }
+  return updateQuantity(item.productId, quantity);
+}
+
 export async function removeFromList(productId: string): Promise<ShoppingList> {
   const list = await _load();
   const filtered = list.filter((i) => i.productId !== productId);

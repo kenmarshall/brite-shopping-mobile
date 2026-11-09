@@ -39,7 +39,7 @@ export function ListItemRow({ item, onToggle, onQuantity, onOpen }: Props) {
         onPress={() => onToggle(item)}
         style={styles.check}
         accessibilityRole="checkbox"
-        accessibilityState={{ checked }}
+        aria-checked={checked}
         accessibilityLabel={checked ? S.uncheck(item.name) : S.check(item.name)}
       >
         <IconSymbol

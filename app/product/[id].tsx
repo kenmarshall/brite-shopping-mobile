@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import { useFocusEffect } from 'expo-router/react-navigation';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,11 +16,11 @@ import { StateView } from '@/components/ui/StateView';
 import { Strings } from '@/constants/Strings';
 import { ButtonSize, CardShadow, Fonts, Radius, Spacing, Type } from '@/constants/Theme';
 import { useColors } from '@/hooks/useColors';
+import { useListActions } from '@/hooks/useListActions';
 import { useSnackbar } from '@/hooks/useSnackbar';
 import { type Product, getProduct } from '@/services/api';
-import { addToList, getShoppingList, updateQuantity } from '@/services/shoppingList';
 import { formatProductSize } from '@/utils/format';
-import { summarizePrices } from '@/utils/prices';
+import { pricesWithUnits, summarizePrices } from '@/utils/prices';
 
 const S = Strings.product;
 const HERO_HEIGHT = 300;
@@ -33,24 +33,14 @@ export default function ProductDetailScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const [load, setLoad] = useState<Load>({ status: 'loading' });
-  const [quantity, setQuantityState] = useState(0);
-  const [updating, setUpdating] = useState(false);
-  // Refs so undo callbacks, created on an earlier render, see the current values.
-  const quantityRef = useRef(0);
-  const updatingRef = useRef(false);
-  const setQuantity = (n: number) => {
-    quantityRef.current = n;
-    setQuantityState(n);
-  };
   const snackbar = useSnackbar();
+  const listActions = useListActions(snackbar, () => router.push('/list'), true);
 
   const fetchProduct = useCallback(async (): Promise<void> => {
     if (!id) return setLoad({ status: 'error' });
     setLoad({ status: 'loading' });
     try {
-      const [product, list] = await Promise.all([getProduct(id), getShoppingList()]);
-      setLoad({ status: 'ready', product });
-      setQuantity(list.find((i) => i.productId === product._id)?.quantity ?? 0);
+      setLoad({ status: 'ready', product: await getProduct(id) });
     } catch {
       setLoad({ status: 'error' });
     }
@@ -63,32 +53,7 @@ export default function ProductDetailScreen() {
   );
 
   const product = load.status === 'ready' ? load.product : null;
-  const summary = useMemo(() => summarizePrices(product?.location_prices ?? []), [product]);
-
-  /** Sets the list quantity for this product; 0 removes it. */
-  const setListQuantity = async (next: number, undoable: boolean): Promise<void> => {
-    if (!product || updatingRef.current) return;
-    const previous = quantityRef.current;
-    updatingRef.current = true;
-    setUpdating(true);
-    try {
-      if (previous === 0) {
-        await addToList({ productId: product._id, name: product.name, estimatedPrice: product.estimated_price, imageUrl: product.image_url });
-        if (next > 1) await updateQuantity(product._id, next);
-      } else {
-        await updateQuantity(product._id, next);
-      }
-      setQuantity(next);
-      if (!undoable) return;
-      if (previous === 0) snackbar.show(S.added, { label: S.undo, onPress: () => setListQuantity(0, false) });
-      else if (next === 0) snackbar.show(S.removed, { label: S.undo, onPress: () => setListQuantity(previous, false) });
-    } catch {
-      snackbar.show(S.listError);
-    } finally {
-      updatingRef.current = false;
-      setUpdating(false);
-    }
-  };
+  const summary = useMemo(() => summarizePrices(product ? pricesWithUnits(product) : []), [product]);
 
   if (load.status === 'loading') return <StateView />;
   if (!product) {
@@ -103,6 +68,7 @@ export default function ProductDetailScreen() {
 
   const meta = [formatProductSize(product.size), product.category].filter(Boolean).join(' · ');
   const hasImage = !!product.image_url && !product.image_url.startsWith('data:image/svg');
+  const quantity = listActions.quantityOf(product._id);
   const barHeight = ButtonSize.large + Spacing.md * 2 + insets.bottom;
 
   return (
@@ -171,11 +137,11 @@ export default function ProductDetailScreen() {
       <View style={[styles.bar, { backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: insets.bottom + Spacing.md }]}>
         {quantity > 0 ? (
           <>
-            <QuantityStepper quantity={quantity} onChange={(n) => setListQuantity(n, true)} disabled={updating} />
+            <QuantityStepper quantity={quantity} onChange={(n) => listActions.setProductQuantity(product, n)} disabled={listActions.busy} />
             <Button label={S.viewList} variant="secondary" icon="cart.fill" onPress={() => router.push('/list')} />
           </>
         ) : (
-          <Button label={S.addToList} icon="cart.badge.plus" busy={updating} onPress={() => setListQuantity(1, true)} />
+          <Button label={S.addToList} icon="cart.badge.plus" busy={listActions.busy} onPress={() => listActions.setProductQuantity(product, 1)} />
         )}
       </View>
 
