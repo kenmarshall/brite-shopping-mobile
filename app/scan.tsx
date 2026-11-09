@@ -18,15 +18,14 @@ import { Colors } from '@/constants/Colors';
 import { ButtonSize, FontSize, Radius, Spacing } from '@/constants/Theme';
 import { formatProductSize, formatPackInfo, formatPrice } from '@/utils/format';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { Strings } from '@/constants/Strings';
+import { submitSuggestion } from '@/services/suggestions';
 import {
   type OpenFoodFactsProduct,
   type Product,
-  linkBarcode,
   lookupBarcode,
   lookupOpenFoodFacts,
   searchProducts,
-  unlinkBarcode,
-  updateProduct,
 } from '@/services/api';
 
 type ScanState =
@@ -137,45 +136,29 @@ export default function ScanResultScreen() {
     confirmLink(product);
   };
 
-  const performLinkWithImageUpdate = async (
-    product: Product,
-    offProduct?: OpenFoodFactsProduct,
-  ) => {
+  // Shoppers suggest the match; a curator links it after review.
+  const suggestMatch = async (product: Product): Promise<void> => {
     if (!barcode) return;
-    setState({ phase: 'linking', selectedProduct: product, offProduct });
+    setState({ phase: 'linking', selectedProduct: product });
     try {
-      await linkBarcode(barcode, product._id);
-
-      // If product has no image but OFF has one, update the product image
-      if (offProduct?.image_url) {
-        const productHasNoImage =
-          !product.image_url || product.image_url.startsWith('data:image/svg');
-        if (productHasNoImage) {
-          try {
-            await updateProduct(product._id, { image_url: offProduct.image_url });
-          } catch {
-            // Non-critical: barcode was linked, image update is best-effort
-          }
-        }
-      }
-
+      await submitSuggestion({ kind: 'barcode', barcode, product_id: product._id });
       setState({ phase: 'linked', product });
     } catch {
-      setState({ phase: 'error', message: 'Failed to link barcode. Please try again.' });
+      setState({ phase: 'error', message: Strings.scanSuggest.sendError });
     }
   };
 
-  const confirmLink = (product: Product, offProduct?: OpenFoodFactsProduct) => {
+  const confirmLink = (product: Product) => {
     const sizeLabel = formatProductSize(product.size);
     const packLabel = formatPackInfo(product.size);
     const priceLabel = product.estimated_price ? formatPrice(product.estimated_price) : null;
     const desc = [sizeLabel, packLabel, priceLabel].filter(Boolean).join(' \u2022 ');
     Alert.alert(
-      'Link Barcode?',
-      `Link barcode ${barcode} to:\n\n${product.name}${desc ? `\n${desc}` : ''}`,
+      Strings.scanSuggest.confirmTitle,
+      Strings.scanSuggest.confirmBody(product.name, desc),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Link', onPress: () => performLinkWithImageUpdate(product, offProduct) },
+        { text: Strings.scanSuggest.cancel, style: 'cancel' },
+        { text: Strings.scanSuggest.confirm, onPress: () => suggestMatch(product) },
       ],
     );
   };
@@ -328,7 +311,7 @@ export default function ScanResultScreen() {
             return (
               <Pressable
                 style={[styles.searchCard, { backgroundColor: colors.card, borderColor: colors.border, marginHorizontal: Spacing.lg }]}
-                onPress={() => confirmLink(item, offProduct)}
+                onPress={() => confirmLink(item)}
               >
                 {item.image_url && !item.image_url.startsWith('data:image/svg') ? (
                   <Image source={{ uri: item.image_url }} style={styles.searchThumb} contentFit="cover" />
@@ -376,7 +359,7 @@ export default function ScanResultScreen() {
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={colors.tint} />
           <ThemedText style={[styles.subtitle, { color: colors.textSecondary, marginTop: Spacing.md }]}>
-            Linking barcode to {state.selectedProduct.name}...
+            {Strings.scanSuggest.sending}
           </ThemedText>
         </View>
       </ThemedView>
@@ -385,44 +368,19 @@ export default function ScanResultScreen() {
 
   // Successfully linked
   if (state.phase === 'linked') {
-    const handleUnlink = () => {
-      if (!barcode) return;
-      Alert.alert(
-        'Undo Link?',
-        `Remove the link between barcode ${barcode} and ${state.product.name}?`,
-        [
-          { text: 'Keep', style: 'cancel' },
-          {
-            text: 'Undo',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await unlinkBarcode(barcode);
-                performLookup();
-              } catch {
-                Alert.alert('Error', 'Failed to unlink barcode. Please try again.');
-              }
-            },
-          },
-        ],
-      );
-    };
     return (
       <ThemedView style={styles.container}>
         <View style={styles.centered}>
           <IconSymbol name="barcode.viewfinder" size={48} color={colors.success} />
-          <ThemedText style={[styles.title, { marginTop: Spacing.md }]}>Barcode Linked!</ThemedText>
+          <ThemedText style={[styles.title, { marginTop: Spacing.md }]}>{Strings.scanSuggest.sentTitle}</ThemedText>
           <ThemedText style={[styles.subtitle, { color: colors.textSecondary }]}>
-            Future scans of this barcode will find {state.product.name}.
+            {Strings.scanSuggest.sentBody}
           </ThemedText>
           <Pressable
             style={[styles.primaryButton, { backgroundColor: colors.tint }]}
             onPress={() => navigateToProduct(state.product._id)}
           >
             <ThemedText style={styles.primaryButtonText}>View Product</ThemedText>
-          </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={handleUnlink}>
-            <ThemedText style={[styles.secondaryButtonText, { color: colors.error }]}>Undo</ThemedText>
           </Pressable>
         </View>
       </ThemedView>

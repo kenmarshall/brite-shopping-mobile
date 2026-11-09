@@ -109,6 +109,7 @@ export default function ProfileScreen() {
         {IS_CURATOR ? (
           <SettingsSection title={S.curatorSection}>
             <SettingsRow icon="barcode.viewfinder" label={S.priceScanning} onPress={() => router.push('/curator')} />
+            <SettingsRow icon="checkmark.circle.fill" label={S.reviewSuggestions} onPress={() => router.push('/curator/suggestions')} />
           </SettingsSection>
         ) : null}
 

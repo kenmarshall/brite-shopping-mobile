@@ -24,16 +24,16 @@ import { Colors } from '@/constants/Colors';
 import { ButtonSize, FontSize, Radius, Spacing } from '@/constants/Theme';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import {
-  addProduct,
   type GoogleStore,
   type Store,
   getStores,
-  linkBarcode,
   lookupBarcode,
   lookupOpenFoodFacts,
   searchGoogleStores,
 } from '@/services/api';
 import { uploadImage, withBackgroundRemoved } from '@/services/cloudinary';
+import { Strings } from '@/constants/Strings';
+import { submitSuggestion } from '@/services/suggestions';
 
 export default function AddProductScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -240,43 +240,27 @@ export default function AddProductScreen() {
       combinedSizeHint = trimmedSize;
     }
 
-    const payload: Parameters<typeof addProduct>[0] = {
-      name: name.trim(),
-      brand: brand.trim() || undefined,
-      size_hint: combinedSizeHint || undefined,
-      image_url: imageUrl || undefined,
-    };
-
-    if (selectedStore) {
-      payload.store_id = selectedStore.store_id;
-      payload.store_name = selectedStore.store_name;
-      if (selectedStore.place_id) {
-        payload.place_id = selectedStore.place_id;
-        payload.latitude = selectedStore.latitude;
-        payload.longitude = selectedStore.longitude;
-        payload.address = selectedStore.address;
-      }
-    }
-
-    if (price.trim()) {
-      payload.price = Number(price);
-      payload.currency = currency.trim().toUpperCase();
-    }
+    // Shoppers suggest new products; a curator adds them after review. Price and store go in the note.
+    const priceNote = price.trim() ? `${currency.trim().toUpperCase()} ${price.trim()}` : null;
+    const note = [priceNote, selectedStore?.store_name].filter(Boolean).join(' at ');
 
     setSubmitting(true);
     try {
-      const response = await addProduct(payload);
-      if (scannedBarcode && response.product_id) {
-        try {
-          await linkBarcode(scannedBarcode, response.product_id);
-        } catch {
-          // Non-critical — product was saved, barcode linking is best-effort
-        }
-      }
-      setSuccess(response.message || 'Product saved successfully.');
+      await submitSuggestion({
+        kind: 'new_product',
+        barcode: scannedBarcode || undefined,
+        fields: {
+          name: name.trim(),
+          brand: brand.trim() || undefined,
+          size_hint: combinedSizeHint,
+          image_url: imageUrl || undefined,
+        },
+        note: note || undefined,
+      });
+      setSuccess(Strings.addSuggest.sent);
       clearForm();
-    } catch (err: any) {
-      setError(err?.message || 'Failed to save product.');
+    } catch {
+      setError(Strings.addSuggest.sendError);
     } finally {
       setSubmitting(false);
     }

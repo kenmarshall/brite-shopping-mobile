@@ -31,12 +31,13 @@ function RootLayoutInner() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="add-product" options={{ headerShown: false }} />
         <Stack.Screen name="product/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="product/edit" options={{ headerShown: false }} />
+        <Stack.Screen name="product/suggest" options={{ headerShown: false }} />
         <Stack.Screen name="scan" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
         <Stack.Screen name="scanner" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
         <Stack.Screen name="curator/index" options={{ headerShown: false }} />
         <Stack.Screen name="curator/new-store" options={{ headerShown: false }} />
         <Stack.Screen name="curator/basket" options={{ headerShown: false }} />
+        <Stack.Screen name="curator/suggestions" options={{ headerShown: false }} />
         <Stack.Screen name="curator/scan" options={{ headerShown: false, presentation: 'fullScreenModal' }} />
         <Stack.Screen name="+not-found" />
       </Stack>

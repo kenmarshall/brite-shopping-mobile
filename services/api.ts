@@ -118,54 +118,6 @@ export async function searchGoogleStores(name: string): Promise<GoogleStore[]> {
   return res.stores;
 }
 
-export interface AddProductPayload {
-  name: string;
-  store_id?: string;
-  store_name?: string;
-  price?: number;
-  currency?: string;
-  brand?: string;
-  category?: string;
-  size_hint?: string;
-  image_url?: string;
-  url?: string;
-  place_id?: string;
-  latitude?: number;
-  longitude?: number;
-  address?: string;
-}
-
-export interface AddProductResponse {
-  message: string;
-  product_id: string;
-  store_id: string;
-}
-
-export async function addProduct(payload: AddProductPayload): Promise<AddProductResponse> {
-  return request<AddProductResponse>('/products', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export interface UpdateProductPayload {
-  name?: string;
-  brand?: string | null;
-  category?: string | null;
-  image_url?: string | null;
-  size?: { value: number | null; unit: string | null; pack_count?: number | null };
-}
-
-export async function updateProduct(
-  productId: string,
-  fields: UpdateProductPayload,
-): Promise<{ message: string; product_id: string }> {
-  return request<{ message: string; product_id: string }>(`/products/${productId}`, {
-    method: 'PUT',
-    body: JSON.stringify(fields),
-  });
-}
-
 // ---------- Device Profiles ----------
 
 export interface DeviceProfile {
@@ -226,19 +178,6 @@ export async function lookupBarcode(barcode: string): Promise<BarcodeLookupResul
     throw new Error(`Barcode lookup failed: ${response.status}`);
   }
   return response.json();
-}
-
-export async function linkBarcode(barcode: string, productId: string): Promise<void> {
-  await request<{ message: string }>(`/barcodes/${barcode}`, {
-    method: 'POST',
-    body: JSON.stringify({ product_id: productId }),
-  });
-}
-
-export async function unlinkBarcode(barcode: string): Promise<void> {
-  await request<{ message: string }>(`/barcodes/${barcode}`, {
-    method: 'DELETE',
-  });
 }
 
 export interface OpenFoodFactsProduct {

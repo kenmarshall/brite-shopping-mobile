@@ -1,4 +1,5 @@
 import { API_BASE_URL, API_KEY, type Product } from '@/services/api';
+import type { SuggestionKind } from '@/utils/suggestions';
 
 // Curator tools ship only in dev builds: the key lives in .env.local and is
 // never added to the EAS production environment, so production builds hide them.
@@ -147,5 +148,43 @@ export async function linkBasketSlot(slot: string, productId: string): Promise<v
   await curatorRequest<{ slot: unknown }>(`/curator/basket/${encodeURIComponent(slot)}`, {
     method: 'PUT',
     body: JSON.stringify({ product_id: productId }),
+  });
+}
+
+export type SuggestionStatus = 'open' | 'applied' | 'dismissed';
+export type SuggestionAction = 'apply' | 'dismiss';
+
+export interface SuggestionFields {
+  name?: string;
+  brand?: string;
+  category?: string;
+  image_url?: string;
+  size_hint?: string;
+}
+
+export interface Suggestion {
+  _id: string;
+  kind: SuggestionKind;
+  status: SuggestionStatus;
+  product_id: string | null;
+  product_name: string | null;
+  barcode: string | null;
+  fields: SuggestionFields;
+  note: string | null;
+  created_at: string;
+  /** The product's values now, for corrections. */
+  current?: { name?: string | null; brand?: string | null; category?: string | null; image_url?: string | null } | null;
+}
+
+export async function listSuggestions(): Promise<Suggestion[]> {
+  const res = await curatorRequest<{ suggestions: Suggestion[] }>('/curator/suggestions?status=open');
+  return res.suggestions;
+}
+
+/** Apply (change the catalog) or dismiss a shopper suggestion. */
+export async function reviewSuggestion(id: string, action: SuggestionAction): Promise<void> {
+  await curatorRequest<{ suggestion: unknown }>(`/curator/suggestions/${encodeURIComponent(id)}`, {
+    method: 'POST',
+    body: JSON.stringify({ action }),
   });
 }

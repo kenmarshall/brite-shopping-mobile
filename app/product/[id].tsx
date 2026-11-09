@@ -110,7 +110,7 @@ export default function ProductDetailScreen() {
         )}
 
         <Pressable
-          onPress={() => router.push({ pathname: '/product/edit', params: { id: product._id } })}
+          onPress={() => router.push({ pathname: '/product/suggest', params: { id: product._id } })}
           style={({ pressed }) => [
             styles.linkRow,
             { backgroundColor: pressed ? colors.backgroundSecondary : colors.surface, borderColor: colors.border },
