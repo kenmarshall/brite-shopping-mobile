@@ -11,7 +11,7 @@ const light = {
   primaryContainer: '#E3F3F9',
   onPrimaryContainer: '#054A61',
   // Neutrals
-  text: '#0F1B24',
+  text: '#1F2D38',
   textSecondary: '#4E5D6A',
   textTertiary: '#6B7884',
   background: '#F5F7F8',

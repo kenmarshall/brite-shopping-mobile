@@ -23,13 +23,13 @@ export function ChipRow({ options, selected, onSelect }: Props) {
             onPress={() => onSelect(o.key)}
             style={[
               styles.chip,
-              on ? { backgroundColor: colors.text, borderColor: colors.text } : { backgroundColor: colors.surface, borderColor: colors.border },
+              on ? { backgroundColor: colors.primaryContainer, borderColor: colors.primary } : { backgroundColor: colors.surface, borderColor: colors.border },
             ]}
             accessibilityRole="tab"
             aria-selected={on}
             accessibilityLabel={o.accessibilityLabel}
           >
-            <ThemedText style={[styles.label, { color: on ? colors.background : colors.text }]}>{o.label}</ThemedText>
+            <ThemedText style={[styles.label, { color: on ? colors.onPrimaryContainer : colors.text }]}>{o.label}</ThemedText>
           </Pressable>
         );
       })}
