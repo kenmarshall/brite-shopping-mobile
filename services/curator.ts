@@ -134,6 +134,14 @@ export async function getStoreBasket(storeId: string): Promise<StoreBasket> {
   return curatorRequest<StoreBasket>(`/curator/basket?store_id=${encodeURIComponent(storeId)}`);
 }
 
+/** Save a product photo taken in store. */
+export async function setCuratorProductImage(productId: string, imageUrl: string): Promise<void> {
+  await curatorRequest<{ product: unknown }>(`/curator/products/${encodeURIComponent(productId)}/image`, {
+    method: 'PUT',
+    body: JSON.stringify({ image_url: imageUrl }),
+  });
+}
+
 /** Point a basket slot at a product, e.g. one just added in store. */
 export async function linkBasketSlot(slot: string, productId: string): Promise<void> {
   await curatorRequest<{ slot: unknown }>(`/curator/basket/${encodeURIComponent(slot)}`, {

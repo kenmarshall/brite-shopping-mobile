@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
+import { ProductPhotoButton } from '@/components/curator/ProductPhotoButton';
 import { ThemedText } from '@/components/ThemedText';
 import { Colors } from '@/constants/Colors';
 import { Strings } from '@/constants/Strings';
@@ -48,6 +49,8 @@ export function PriceForm({ product, storeId, saving, onSave, onSkip }: Props) {
             .join(' · ')}
         </ThemedText>
       </View>
+
+      {product.image_url ? null : <ProductPhotoButton product={product} />}
 
       <View style={styles.field}>
         <ThemedText style={styles.label} nativeID="shelf-price-label">

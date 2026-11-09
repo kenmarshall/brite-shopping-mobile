@@ -31,6 +31,7 @@ const MAPPING = {
   'person.circle': 'account-circle',
   'line.3.horizontal.decrease': 'filter-list',
   'photo': 'image',
+  'camera': 'photo-camera',
   'barcode.viewfinder': 'qr-code-scanner',
   'xmark': 'close',
   'flashlight.on.fill': 'flash-on',
