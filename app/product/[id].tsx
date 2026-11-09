@@ -1,442 +1,246 @@
 import { Image } from 'expo-image';
 import { useFocusEffect } from 'expo-router/react-navigation';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { PriceHero } from '@/components/product/PriceHero';
+import { StorePriceList } from '@/components/product/StorePriceList';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { Colors } from '@/constants/Colors';
-import { CardShadow, FontSize, Radius, Spacing } from '@/constants/Theme';
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { Button } from '@/components/ui/Button';
+import { IconSymbol } from '@/components/ui/IconSymbol';
+import { QuantityStepper } from '@/components/ui/QuantityStepper';
+import { Snackbar, type SnackbarMessage } from '@/components/ui/Snackbar';
+import { StateView } from '@/components/ui/StateView';
+import { Strings } from '@/constants/Strings';
+import { ButtonSize, CardShadow, Fonts, Radius, Spacing, Type } from '@/constants/Theme';
+import { useColors } from '@/hooks/useColors';
 import { type Product, getProduct } from '@/services/api';
-import { addToList, isInList } from '@/services/shoppingList';
-import { formatMeasure, formatPackInfo, formatPrice } from '@/utils/format';
+import { addToList, getShoppingList, updateQuantity } from '@/services/shoppingList';
+import { formatProductSize } from '@/utils/format';
+import { summarizePrices } from '@/utils/prices';
+
+const S = Strings.product;
+const HERO_HEIGHT = 300;
+
+type Load = { status: 'loading' } | { status: 'error' } | { status: 'ready'; product: Product };
 
 export default function ProductDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [product, setProduct] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [inList, setInList] = useState(false);
-  const [addedFeedback, setAddedFeedback] = useState(false);
-  const colorScheme = useColorScheme() ?? 'light';
-  const colors = Colors[colorScheme];
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const [load, setLoad] = useState<Load>({ status: 'loading' });
+  const [quantity, setQuantityState] = useState(0);
+  const [updating, setUpdating] = useState(false);
+  // Refs so undo callbacks, created on an earlier render, see the current values.
+  const quantityRef = useRef(0);
+  const updatingRef = useRef(false);
+  const setQuantity = (n: number) => {
+    quantityRef.current = n;
+    setQuantityState(n);
+  };
+  const [snack, setSnack] = useState<SnackbarMessage | null>(null);
+  const snackId = useRef(0);
+
+  const fetchProduct = useCallback(async (): Promise<void> => {
+    if (!id) return setLoad({ status: 'error' });
+    setLoad({ status: 'loading' });
+    try {
+      const [product, list] = await Promise.all([getProduct(id), getShoppingList()]);
+      setLoad({ status: 'ready', product });
+      setQuantity(list.find((i) => i.productId === product._id)?.quantity ?? 0);
+    } catch {
+      setLoad({ status: 'error' });
+    }
+  }, [id]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!id) return;
-      setLoading(true);
-      getProduct(id)
-        .then((p) => {
-          setProduct(p);
-          isInList(p._id).then(setInList);
-        })
-        .catch((err) => setError(err.message))
-        .finally(() => setLoading(false));
-    }, [id]),
+      fetchProduct();
+    }, [fetchProduct]),
   );
 
-  const handleAddToList = async () => {
-    if (!product) return;
-    await addToList({
-      productId: product._id,
-      name: product.name,
-      estimatedPrice: product.estimated_price,
-      imageUrl: product.image_url,
-    });
-    setInList(true);
-    setAddedFeedback(true);
-    setTimeout(() => setAddedFeedback(false), 1500);
+  const product = load.status === 'ready' ? load.product : null;
+  const summary = useMemo(() => summarizePrices(product?.location_prices ?? []), [product]);
+
+  const showSnack = (text: string, onAction?: () => void) => {
+    snackId.current += 1;
+    setSnack({ id: snackId.current, text, actionLabel: onAction ? S.undo : undefined, onAction });
+  };
+  const dismissSnack = useCallback(() => setSnack(null), []);
+
+  /** Sets the list quantity for this product; 0 removes it. */
+  const setListQuantity = async (next: number, undoable: boolean): Promise<void> => {
+    if (!product || updatingRef.current) return;
+    const previous = quantityRef.current;
+    updatingRef.current = true;
+    setUpdating(true);
+    try {
+      if (previous === 0) {
+        await addToList({ productId: product._id, name: product.name, estimatedPrice: product.estimated_price, imageUrl: product.image_url });
+        if (next > 1) await updateQuantity(product._id, next);
+      } else {
+        await updateQuantity(product._id, next);
+      }
+      setQuantity(next);
+      if (!undoable) return;
+      if (previous === 0) showSnack(S.added, () => setListQuantity(0, false));
+      else if (next === 0) showSnack(S.removed, () => setListQuantity(previous, false));
+    } catch {
+      showSnack(S.listError);
+    } finally {
+      updatingRef.current = false;
+      setUpdating(false);
+    }
   };
 
-  if (loading) {
+  if (load.status === 'loading') return <StateView />;
+  if (!product) {
     return (
-      <ThemedView style={styles.centered}>
-        <ActivityIndicator size="large" color={colors.tint} />
-      </ThemedView>
+      <StateView
+        title={S.notFound}
+        body={S.loadError}
+        action={id ? { label: S.retry, onPress: fetchProduct } : { label: S.goBack, onPress: () => router.back() }}
+      />
     );
   }
 
-  if (error || !product) {
-    return (
-      <ThemedView style={styles.centered}>
-        <ThemedText style={[styles.errorText, { color: colors.error }]}>
-          {error || 'Product not found'}
-        </ThemedText>
-        <Pressable
-          onPress={() => router.back()}
-          style={[styles.backButton, { backgroundColor: colors.tint }]}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-        >
-          <ThemedText style={styles.backButtonText}>Go Back</ThemedText>
-        </Pressable>
-      </ThemedView>
-    );
-  }
-
-  const sortedPrices = [...product.location_prices].sort((a, b) => a.amount - b.amount);
-  const lowestPrice = sortedPrices.length > 0 ? sortedPrices[0].amount : null;
-  const packLabel = formatPackInfo(product.size);
-  const measureLabel = formatMeasure(product.size);
+  const meta = [formatProductSize(product.size), product.category].filter(Boolean).join(' · ');
+  const hasImage = !!product.image_url && !product.image_url.startsWith('data:image/svg');
+  const barHeight = ButtonSize.large + Spacing.md * 2 + insets.bottom;
 
   return (
-    <ThemedView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.backNav}>
-          <Pressable
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            hitSlop={8}
-          >
-            <ThemedText style={[styles.backArrow, { color: colors.tint }]}>
-              {'<'} Back
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            onPress={() => router.push({ pathname: '/product/edit', params: { id: product._id } })}
-            accessibilityRole="button"
-            accessibilityLabel="Edit product"
-            hitSlop={8}
-          >
-            <ThemedText style={[styles.editLink, { color: colors.tint }]}>Edit</ThemedText>
-          </Pressable>
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: barHeight + Spacing.xl }]}>
+        <View style={[styles.hero, { backgroundColor: hasImage ? colors.surface : colors.placeholder }]}>
+          {hasImage ? (
+            <Image
+              source={{ uri: product.image_url ?? undefined }}
+              style={styles.heroImage}
+              contentFit="contain"
+              accessibilityLabel={S.imageLabel(product.name)}
+            />
+          ) : (
+            <IconSymbol name="photo" size={72} color={colors.placeholderIcon} />
+          )}
         </View>
 
-        {product.image_url && !product.image_url.startsWith('data:image/svg') ? (
-          <Image
-            source={{ uri: product.image_url }}
-            style={[styles.heroImage, { backgroundColor: colors.backgroundSecondary }]}
-            contentFit="contain"
-          />
+        <View style={styles.titleBlock}>
+          <ThemedText style={styles.name} accessibilityRole="header">{product.name}</ThemedText>
+          {meta ? <ThemedText style={[styles.meta, { color: colors.textSecondary }]}>{meta}</ThemedText> : null}
+        </View>
+
+        <PriceHero product={product} summary={summary} />
+
+        <View style={styles.sectionHeader}>
+          <ThemedText style={styles.sectionTitle} accessibilityRole="header">{S.pricesByStore}</ThemedText>
+          {summary.rows.length > 1 ? (
+            <ThemedText style={[styles.sectionNote, { color: colors.textSecondary }]}>{S.lowestFirst}</ThemedText>
+          ) : null}
+        </View>
+        {summary.rows.length > 0 ? (
+          <StorePriceList rows={summary.rows} />
         ) : (
-          <View style={[styles.heroImage, { backgroundColor: colors.placeholder }]}>
-            <ThemedText style={{ color: colors.placeholderText, fontSize: FontSize.md }}>
-              No Image
-            </ThemedText>
+          <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <ThemedText style={styles.emptyTitle}>{S.noPricesTitle}</ThemedText>
+            <ThemedText style={[styles.sectionNote, { color: colors.textSecondary }]}>{S.noPricesBody}</ThemedText>
           </View>
         )}
 
-        <View style={styles.details}>
-          <ThemedText type="title" style={styles.name}>{product.name}</ThemedText>
-
-          {(packLabel || measureLabel) && (
-            <View style={styles.sizeRow}>
-              {packLabel && (
-                <View style={[styles.packBadge, { backgroundColor: colors.tint + '18' }]}>
-                  <ThemedText style={[styles.packBadgeText, { color: colors.tint }]}>
-                    {packLabel}
-                  </ThemedText>
-                </View>
-              )}
-              {measureLabel && (
-                <ThemedText style={[styles.size, { color: colors.textSecondary }]}>
-                  {measureLabel}
-                </ThemedText>
-              )}
-            </View>
-          )}
-
-          {product.category && (
-            <View style={styles.categoryBadge}>
-              <ThemedText style={styles.categoryText}>{product.category}</ThemedText>
-            </View>
-          )}
-
-          {product.tags.length > 0 && (
-            <View style={styles.tagsRow}>
-              {product.tags.map((tag) => (
-                <View key={tag} style={[styles.tag, { backgroundColor: colors.backgroundSecondary }]}>
-                  <ThemedText style={[styles.tagText, { color: colors.textSecondary }]}>
-                    {tag}
-                  </ThemedText>
-                </View>
-              ))}
-            </View>
-          )}
-
-          <View style={[styles.estimatedPriceRow, { borderColor: colors.border }]}>
-            <View>
-              <ThemedText style={[styles.estimatedLabel, { color: colors.textSecondary }]}>
-                Estimated Price
-              </ThemedText>
-              <ThemedText style={[styles.estimatedPrice, { color: colors.tint }]}>
-                {formatPrice(product.estimated_price)}
-              </ThemedText>
-            </View>
-            {sortedPrices.length > 1 && (
-              <View style={[styles.savingsBadge, { backgroundColor: colors.success + '15' }]}>
-                <ThemedText style={[styles.savingsText, { color: colors.success }]}>
-                  {sortedPrices.length} stores
-                </ThemedText>
-              </View>
-            )}
-          </View>
-
-          <Pressable
-            style={[
-              styles.addToListButton,
-              { backgroundColor: colors.tint },
-              addedFeedback && { backgroundColor: colors.success },
-            ]}
-            onPress={handleAddToList}
-            accessibilityRole="button"
-            accessibilityLabel={
-              addedFeedback
-                ? 'Added to shopping list'
-                : inList
-                  ? 'Add another to shopping list'
-                  : 'Add to shopping list'
-            }
-          >
-            <ThemedText style={styles.addToListText}>
-              {addedFeedback ? 'Added!' : inList ? '+ Add Another' : '+ Add to Shopping List'}
-            </ThemedText>
-          </Pressable>
-
-          <ThemedText type="subtitle" style={styles.pricesHeader}>
-            Prices by Store ({sortedPrices.length})
-          </ThemedText>
-
-          {sortedPrices.map((lp, index) => (
-            <View
-              key={lp.location_id}
-              style={[
-                styles.priceCard,
-                { backgroundColor: colors.card },
-                index === 0 && sortedPrices.length > 1 && {
-                  borderWidth: 2,
-                  borderColor: colors.success,
-                },
-              ]}
-            >
-              <View style={styles.priceCardContent}>
-                <View>
-                  <ThemedText style={styles.storeName}>
-                    {lp.store_name || lp.location_id}
-                  </ThemedText>
-                  <ThemedText style={[styles.currency, { color: colors.textSecondary }]}>
-                    {lp.currency}
-                  </ThemedText>
-                </View>
-                <View style={styles.priceRight}>
-                  <ThemedText
-                    style={[
-                      styles.priceAmount,
-                      lp.amount === lowestPrice && { color: colors.success },
-                    ]}
-                  >
-                    {formatPrice(lp.amount, lp.currency)}
-                  </ThemedText>
-                  {index === 0 && sortedPrices.length > 1 && (
-                    <ThemedText style={[styles.bestLabel, { color: colors.success }]}>
-                      Best Price
-                    </ThemedText>
-                  )}
-                </View>
-              </View>
-            </View>
-          ))}
-
-          {sortedPrices.length === 0 && (
-            <ThemedText style={[styles.noPrices, { color: colors.textSecondary }]}>
-              No prices available yet
-            </ThemedText>
-          )}
-        </View>
+        <Pressable
+          onPress={() => router.push({ pathname: '/product/edit', params: { id: product._id } })}
+          style={({ pressed }) => [
+            styles.linkRow,
+            { backgroundColor: pressed ? colors.backgroundSecondary : colors.surface, borderColor: colors.border },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={S.suggestCorrection}
+        >
+          <IconSymbol name="pencil" size={20} color={colors.primaryStrong} />
+          <ThemedText style={styles.linkText}>{S.suggestCorrection}</ThemedText>
+          <IconSymbol name="chevron.right" size={18} color={colors.textTertiary} />
+        </Pressable>
+        <ThemedText style={[styles.disclaimer, { color: colors.textSecondary }]}>{S.disclaimer}</ThemedText>
       </ScrollView>
-    </ThemedView>
+
+      <Pressable
+        onPress={() => router.back()}
+        style={[styles.navButton, { top: insets.top + Spacing.sm, backgroundColor: colors.surface }]}
+        accessibilityRole="button"
+        accessibilityLabel={S.back}
+      >
+        <IconSymbol name="chevron.left" size={20} color={colors.text} />
+      </Pressable>
+
+      <View style={[styles.bar, { backgroundColor: colors.surface, borderColor: colors.border, paddingBottom: insets.bottom + Spacing.md }]}>
+        {quantity > 0 ? (
+          <>
+            <QuantityStepper quantity={quantity} onChange={(n) => setListQuantity(n, true)} disabled={updating} />
+            <Button label={S.viewList} variant="secondary" icon="cart.fill" onPress={() => router.push('/explore')} />
+          </>
+        ) : (
+          <Button label={S.addToList} icon="cart.badge.plus" busy={updating} onPress={() => setListQuantity(1, true)} />
+        )}
+      </View>
+
+      <Snackbar message={snack} onDismiss={dismissSnack} bottom={barHeight + Spacing.sm} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: Spacing.xl,
-  },
-  scroll: {
-    paddingBottom: 40,
-  },
-  backNav: {
-    paddingTop: Spacing.headerTop,
+  screen: { flex: 1 },
+  scroll: { gap: Spacing.lg },
+  hero: { height: HERO_HEIGHT, alignItems: 'center', justifyContent: 'center' },
+  heroImage: { width: '100%', height: '100%' },
+  titleBlock: { paddingHorizontal: Spacing.lg, gap: Spacing.xs },
+  name: { ...Type.title },
+  meta: { ...Type.body },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.sm,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    marginTop: Spacing.sm,
+    marginBottom: -Spacing.sm,
   },
-  backArrow: {
-    fontSize: FontSize.md,
-    fontWeight: '600',
-  },
-  editLink: {
-    fontSize: FontSize.md,
-    fontWeight: '600',
-  },
-  heroImage: {
-    width: '100%',
-    height: 250,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  details: {
-    padding: Spacing.lg,
-  },
-  name: {
-    fontSize: FontSize.xxl,
-    marginBottom: Spacing.xs,
-  },
-  brand: {
-    fontSize: FontSize.md,
-    marginBottom: Spacing.xs,
-  },
-  sizeRow: {
+  sectionTitle: { ...Type.section },
+  sectionNote: { ...Type.callout },
+  emptyCard: { marginHorizontal: Spacing.lg, borderWidth: 1, borderRadius: Radius.lg, padding: Spacing.lg, gap: Spacing.xs },
+  emptyTitle: { ...Type.headline },
+  linkRow: {
+    marginHorizontal: Spacing.lg,
+    minHeight: ButtonSize.large,
+    borderWidth: 1,
+    borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: Spacing.sm,
+    gap: Spacing.md,
   },
-  packBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.sm,
-  },
-  packBadgeText: {
-    fontSize: FontSize.sm,
-    fontWeight: '600',
-  },
-  size: {
-    fontSize: FontSize.sm,
-  },
-  categoryBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#E3F2FD',
-    paddingHorizontal: 10,
-    paddingVertical: Spacing.xs,
-    borderRadius: Radius.md,
-    marginBottom: Spacing.sm,
-  },
-  categoryText: {
-    fontSize: FontSize.sm,
-    color: '#1565C0',
-  },
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: Spacing.lg,
-  },
-  tag: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 3,
-    borderRadius: Radius.sm,
-  },
-  tagText: {
-    fontSize: FontSize.xs,
-  },
-  estimatedPriceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: Spacing.md,
-    marginBottom: Spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  estimatedLabel: {
-    fontSize: FontSize.xs,
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  estimatedPrice: {
-    fontSize: FontSize.xxl,
-    fontWeight: '700',
-  },
-  savingsBadge: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
+  linkText: { ...Type.body, fontFamily: Fonts.medium, flex: 1 },
+  disclaimer: { ...Type.callout, paddingHorizontal: Spacing.lg, marginTop: -Spacing.sm },
+  navButton: {
+    position: 'absolute',
+    left: Spacing.lg,
+    width: ButtonSize.touch,
+    height: ButtonSize.touch,
     borderRadius: Radius.pill,
-  },
-  savingsText: {
-    fontSize: FontSize.xs,
-    fontWeight: '600',
-  },
-  addToListButton: {
-    borderRadius: Radius.sm,
-    paddingVertical: 14,
     alignItems: 'center',
-    marginBottom: Spacing.xl,
-  },
-  addToListText: {
-    color: '#fff',
-    fontSize: FontSize.md,
-    fontWeight: '700',
-  },
-  pricesHeader: {
-    marginBottom: Spacing.md,
-  },
-  priceCard: {
-    borderRadius: Radius.md,
-    padding: 14,
-    marginBottom: Spacing.sm,
+    justifyContent: 'center',
     ...CardShadow,
   },
-  priceCardContent: {
+  bar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: Spacing.md,
+    paddingHorizontal: Spacing.lg,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  storeName: {
-    fontSize: FontSize.md,
-    fontWeight: '600',
-  },
-  currency: {
-    fontSize: FontSize.xs,
-    marginTop: 2,
-  },
-  priceRight: {
-    alignItems: 'flex-end',
-  },
-  priceAmount: {
-    fontSize: FontSize.lg,
-    fontWeight: '700',
-  },
-  bestLabel: {
-    fontSize: FontSize.xs,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  noPrices: {
-    textAlign: 'center',
-    marginTop: Spacing.xl,
-  },
-  errorText: {
-    textAlign: 'center',
-    marginBottom: Spacing.md,
-  },
-  backButton: {
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.sm,
-  },
-  backButtonText: {
-    color: '#fff',
-    fontWeight: '600',
+    gap: Spacing.md,
   },
 });

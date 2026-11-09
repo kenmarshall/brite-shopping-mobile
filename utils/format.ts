@@ -1,13 +1,14 @@
+/** 1450 -> "1,450", 1449.5 -> "1,449.50": cents only when there are any. */
 function commaFormat(value: number): string {
   const [whole, decimal] = value.toFixed(2).split('.');
   const withCommas = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return `${withCommas}.${decimal}`;
+  return decimal === '00' ? withCommas : `${withCommas}.${decimal}`;
 }
 
 export function formatPrice(amount: number | null | undefined, currency = 'JMD'): string {
   if (amount == null) return 'Price unavailable';
   if (currency === 'USD') return `US$${commaFormat(amount)}`;
-  return `$${commaFormat(amount)}`;
+  return `J$${commaFormat(amount)}`;
 }
 
 export function formatStoreCount(count: number): string {

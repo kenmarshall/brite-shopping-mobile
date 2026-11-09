@@ -11,6 +11,7 @@ export const Spacing = {
 } as const;
 
 export const Radius = {
+  xs: 6,
   sm: 8,
   md: 12,
   lg: 16,
@@ -53,6 +54,7 @@ export function interForWeight(weight: string | number | undefined): string {
 export const Type = StyleSheet.create({
   display: { fontFamily: Fonts.display, fontSize: 34, lineHeight: 40, letterSpacing: -0.5 },
   title: { fontFamily: Fonts.displayBold, fontSize: 22, lineHeight: 28 },
+  section: { fontFamily: Fonts.display, fontSize: 20, lineHeight: 26 },
   headline: { fontFamily: Fonts.semibold, fontSize: 17, lineHeight: 22 },
   body: { fontFamily: Fonts.regular, fontSize: 15, lineHeight: 22 },
   callout: { fontFamily: Fonts.medium, fontSize: 13, lineHeight: 18 },
@@ -73,4 +75,6 @@ export const CardShadow = StyleSheet.create({
 export const ButtonSize = {
   touch: 44,
   small: 36,
+  /** Primary actions in a bottom bar. */
+  large: 52,
 } as const;

@@ -28,11 +28,12 @@ React Native (Expo) mobile app for the Brite Shopping ecosystem — a price comp
 - Node 24 (`.nvmrc`; run `nvm use`). SDK 58 does not support odd-numbered Node releases
 - Install: `npm install`
 - Start: `npx expo start`
+- Tests: `npm test` (Jest, pure logic in `__tests__/`)
 - iOS bundle ID: `com.kenmarshall.briteshopping`
 
 ## Current Screens
 - **Search (Home)** — unified search bar + category chips + product list
-- **Product Detail** — hero image, price comparison across stores, tags, category badge
+- **Product Detail** — lowest price + store as the hero (with Estimate, store count, unit price), every store's price with its age ("may be outdated" after 30 days), add-to-list with quantity stepper and Undo snackbar
 - **Explore** — placeholder (coming soon)
 
 ## API Client
