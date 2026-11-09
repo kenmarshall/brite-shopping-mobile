@@ -34,7 +34,8 @@ React Native (Expo) mobile app for the Brite Shopping ecosystem — a price comp
 ## Current Screens
 - **Search (Home)** — unified search bar + category chips + product list
 - **Product Detail** — lowest price + store as the hero (with Estimate, store count, unit price), every store's price with its age ("may be outdated" after 30 days), add-to-list with quantity stepper and Undo snackbar
-- **Explore** — placeholder (coming soon)
+- **Tabs** — Home · Scan (opens `/scanner`, then `/scan` looks up the barcode) · List (badge = items still to get) · Profile. `add` is a hidden route reached from a scan that isn't in the catalog
+- **List** — tick items off into "In cart", quantity stepper, "Still to get" and estimated totals; removals and clears have Undo
 - **Curator: price scanning** (`app/curator/*`) — pick the store you're in (nearest first) or pin a new one, then scan barcodes and record shelf prices. Shown in Profile only when `EXPO_PUBLIC_CURATOR_KEY` is set (dev builds via `.env.local`). Never add that key to the EAS production environment
 
 ## API Client

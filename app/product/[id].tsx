@@ -11,11 +11,12 @@ import { ThemedText } from '@/components/ThemedText';
 import { Button } from '@/components/ui/Button';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { QuantityStepper } from '@/components/ui/QuantityStepper';
-import { Snackbar, type SnackbarMessage } from '@/components/ui/Snackbar';
+import { Snackbar } from '@/components/ui/Snackbar';
 import { StateView } from '@/components/ui/StateView';
 import { Strings } from '@/constants/Strings';
 import { ButtonSize, CardShadow, Fonts, Radius, Spacing, Type } from '@/constants/Theme';
 import { useColors } from '@/hooks/useColors';
+import { useSnackbar } from '@/hooks/useSnackbar';
 import { type Product, getProduct } from '@/services/api';
 import { addToList, getShoppingList, updateQuantity } from '@/services/shoppingList';
 import { formatProductSize } from '@/utils/format';
@@ -41,8 +42,7 @@ export default function ProductDetailScreen() {
     quantityRef.current = n;
     setQuantityState(n);
   };
-  const [snack, setSnack] = useState<SnackbarMessage | null>(null);
-  const snackId = useRef(0);
+  const snackbar = useSnackbar();
 
   const fetchProduct = useCallback(async (): Promise<void> => {
     if (!id) return setLoad({ status: 'error' });
@@ -65,12 +65,6 @@ export default function ProductDetailScreen() {
   const product = load.status === 'ready' ? load.product : null;
   const summary = useMemo(() => summarizePrices(product?.location_prices ?? []), [product]);
 
-  const showSnack = (text: string, onAction?: () => void) => {
-    snackId.current += 1;
-    setSnack({ id: snackId.current, text, actionLabel: onAction ? S.undo : undefined, onAction });
-  };
-  const dismissSnack = useCallback(() => setSnack(null), []);
-
   /** Sets the list quantity for this product; 0 removes it. */
   const setListQuantity = async (next: number, undoable: boolean): Promise<void> => {
     if (!product || updatingRef.current) return;
@@ -86,10 +80,10 @@ export default function ProductDetailScreen() {
       }
       setQuantity(next);
       if (!undoable) return;
-      if (previous === 0) showSnack(S.added, () => setListQuantity(0, false));
-      else if (next === 0) showSnack(S.removed, () => setListQuantity(previous, false));
+      if (previous === 0) snackbar.show(S.added, { label: S.undo, onPress: () => setListQuantity(0, false) });
+      else if (next === 0) snackbar.show(S.removed, { label: S.undo, onPress: () => setListQuantity(previous, false) });
     } catch {
-      showSnack(S.listError);
+      snackbar.show(S.listError);
     } finally {
       updatingRef.current = false;
       setUpdating(false);
@@ -178,14 +172,14 @@ export default function ProductDetailScreen() {
         {quantity > 0 ? (
           <>
             <QuantityStepper quantity={quantity} onChange={(n) => setListQuantity(n, true)} disabled={updating} />
-            <Button label={S.viewList} variant="secondary" icon="cart.fill" onPress={() => router.push('/explore')} />
+            <Button label={S.viewList} variant="secondary" icon="cart.fill" onPress={() => router.push('/list')} />
           </>
         ) : (
           <Button label={S.addToList} icon="cart.badge.plus" busy={updating} onPress={() => setListQuantity(1, true)} />
         )}
       </View>
 
-      <Snackbar message={snack} onDismiss={dismissSnack} bottom={barHeight + Spacing.sm} />
+      <Snackbar message={snackbar.message} onDismiss={snackbar.dismiss} bottom={barHeight + Spacing.sm} />
     </View>
   );
 }

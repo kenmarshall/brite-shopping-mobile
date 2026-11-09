@@ -53,11 +53,24 @@ export interface ShoppingListItem {
   imageUrl: string | null;
   quantity: number;
   addedAt: string;
+  /** Ticked off while shopping ("in cart"). */
+  checked?: boolean;
 }
 
 export type ShoppingList = ShoppingListItem[];
 
 let _cache: ShoppingList | null = null;
+
+type Listener = (list: ShoppingList) => void;
+const _listeners = new Set<Listener>();
+
+/** Called with the new list after every change. Returns an unsubscribe function. */
+export function subscribe(listener: Listener): () => void {
+  _listeners.add(listener);
+  return () => {
+    _listeners.delete(listener);
+  };
+}
 
 async function _listKey(): Promise<string> {
   const profileId = await getProfileId();
@@ -78,6 +91,7 @@ async function _load(): Promise<ShoppingList> {
 
 async function _save(list: ShoppingList): Promise<void> {
   _cache = list;
+  _listeners.forEach((listener) => listener(list));
   try {
     const key = await _listKey();
     await AsyncStorage.setItem(key, JSON.stringify(list));
@@ -111,13 +125,11 @@ export async function addToList(
   item: Omit<ShoppingListItem, 'quantity' | 'addedAt'>,
 ): Promise<ShoppingList> {
   const list = await _load();
-  const existing = list.find((i) => i.productId === item.productId);
-  if (existing) {
-    existing.quantity += 1;
-  } else {
-    list.push({ ...item, quantity: 1, addedAt: new Date().toISOString() });
-  }
-  const updated = [...list];
+  // Never mutate the cached list: Undo restores earlier snapshots of it.
+  const exists = list.some((i) => i.productId === item.productId);
+  const updated = exists
+    ? list.map((i) => (i.productId === item.productId ? { ...i, quantity: i.quantity + 1 } : i))
+    : [...list, { ...item, quantity: 1, addedAt: new Date().toISOString() }];
   await _save(updated);
   return updated;
 }
@@ -132,11 +144,7 @@ export async function updateQuantity(
     await _save(filtered);
     return filtered;
   }
-  const item = list.find((i) => i.productId === productId);
-  if (item) {
-    item.quantity = quantity;
-  }
-  const updated = [...list];
+  const updated = list.map((i) => (i.productId === productId ? { ...i, quantity } : i));
   await _save(updated);
   return updated;
 }
@@ -146,6 +154,28 @@ export async function removeFromList(productId: string): Promise<ShoppingList> {
   const filtered = list.filter((i) => i.productId !== productId);
   await _save(filtered);
   return filtered;
+}
+
+export async function setChecked(productId: string, checked: boolean): Promise<ShoppingList> {
+  const list = await _load();
+  const updated = list.map((i) => (i.productId === productId ? { ...i, checked } : i));
+  await _save(updated);
+  return updated;
+}
+
+/** Removes every ticked-off item. */
+export async function clearChecked(): Promise<ShoppingList> {
+  const list = await _load();
+  const updated = list.filter((i) => !i.checked);
+  await _save(updated);
+  return updated;
+}
+
+/** Puts back a previous list, for Undo. */
+export async function restoreList(list: ShoppingList): Promise<ShoppingList> {
+  const restored = [...list];
+  await _save(restored);
+  return restored;
 }
 
 export async function clearList(): Promise<ShoppingList> {

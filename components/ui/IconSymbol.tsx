@@ -39,6 +39,8 @@ const MAPPING = {
   'mappin.and.ellipse': 'add-location-alt',
   'tag.fill': 'sell',
   'checkmark.circle.fill': 'check-circle',
+  'circle': 'radio-button-unchecked',
+  'list.bullet': 'format-list-bulleted',
   'minus': 'remove',
   'plus': 'add',
   'clock': 'schedule',
