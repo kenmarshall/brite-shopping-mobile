@@ -1,6 +1,6 @@
 import type { Product } from '@/services/api';
 
-export type SuggestionKind = 'correction' | 'wrong_price' | 'new_product' | 'barcode';
+export type SuggestionKind = 'correction' | 'wrong_price' | 'new_product' | 'barcode' | 'duplicate';
 
 export interface CorrectionDraft {
   name: string;

@@ -6,6 +6,8 @@ export interface SuggestionInput {
   kind: SuggestionKind;
   product_id?: string;
   barcode?: string;
+  /** For a duplicate flag: the other listing of the same product. */
+  other_product_id?: string;
   fields?: { name?: string; brand?: string; image_url?: string; size_hint?: string };
   note?: string;
 }

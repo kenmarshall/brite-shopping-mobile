@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { DuplicatePicker } from '@/components/product/DuplicatePicker';
 import { ThemedText } from '@/components/ThemedText';
 import { Button } from '@/components/ui/Button';
 import { ChipRow } from '@/components/ui/ChipRow';
@@ -17,7 +18,7 @@ import { correctionFields } from '@/utils/suggestions';
 
 const S = Strings.suggest;
 type Kind = keyof typeof S.kinds;
-const KINDS: Kind[] = ['correction', 'wrong_price'];
+const KINDS: Kind[] = ['correction', 'wrong_price', 'duplicate'];
 
 type Load = { status: 'loading' } | { status: 'error' } | { status: 'ready'; product: Product } | { status: 'sent' };
 
@@ -27,17 +28,17 @@ export default function SuggestCorrectionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const [load, setLoad] = useState<Load>({ status: 'loading' });
+  const [load, setLoad] = useState<Load>(() => (id ? { status: 'loading' } : { status: 'error' }));
   const [kind, setKind] = useState<Kind>('correction');
   const [name, setName] = useState('');
   const [brand, setBrand] = useState('');
   const [note, setNote] = useState('');
+  const [other, setOther] = useState<Product | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
   const fetchProduct = useCallback(async (): Promise<void> => {
-    if (!id) return setLoad({ status: 'error' });
-    setLoad({ status: 'loading' });
+    if (!id) return;
     try {
       const product = await getProduct(id);
       setName(product.name);
@@ -53,7 +54,7 @@ export default function SuggestCorrectionScreen() {
   }, [fetchProduct]);
 
   if (load.status === 'loading') return <StateView />;
-  if (load.status === 'error') return <StateView title={S.title} body={S.loadError} action={{ label: S.retry, onPress: fetchProduct }} />;
+  if (load.status === 'error') return <StateView title={S.title} body={S.loadError} action={{ label: S.retry, onPress: () => { setLoad({ status: 'loading' }); fetchProduct(); } }} />;
   if (load.status === 'sent') {
     return <StateView title={S.sentTitle} body={S.sentBody} action={{ label: S.backToProduct, onPress: () => router.back() }} />;
   }
@@ -65,10 +66,11 @@ export default function SuggestCorrectionScreen() {
     const trimmedNote = note.trim();
     if (kind === 'correction' && Object.keys(fields).length === 0 && !trimmedNote) return setError(S.nothingChanged);
     if (kind === 'wrong_price' && !trimmedNote) return setError(S.priceNoteRequired);
+    if (kind === 'duplicate' && !other) return setError(S.duplicateRequired);
     setError(null);
     setSending(true);
     try {
-      await submitSuggestion({ kind, product_id: product._id, fields, note: trimmedNote || undefined });
+      await submitSuggestion({ kind, product_id: product._id, fields, note: trimmedNote || undefined, other_product_id: kind === 'duplicate' ? other?._id : undefined });
       setLoad({ status: 'sent' });
     } catch {
       setError(S.sendError);
@@ -114,6 +116,13 @@ export default function SuggestCorrectionScreen() {
               <TextInput value={brand} onChangeText={setBrand} accessibilityLabelledBy="suggest-brand" style={inputStyle} maxLength={200} />
             </View>
           </>
+        ) : null}
+
+        {kind === 'duplicate' ? (
+          <View style={[styles.field, styles.padded]}>
+            <ThemedText style={styles.label}>{S.duplicateLabel}</ThemedText>
+            <DuplicatePicker productId={product._id} initialQuery={product.name} selected={other} onSelect={setOther} />
+          </View>
         ) : null}
 
         <View style={[styles.field, styles.padded]}>
