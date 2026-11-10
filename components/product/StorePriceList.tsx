@@ -7,7 +7,7 @@ import { Strings } from '@/constants/Strings';
 import { Fonts, Radius, Spacing, Type } from '@/constants/Theme';
 import { useColors } from '@/hooks/useColors';
 import { formatPrice } from '@/utils/format';
-import { formatAge, type StorePrice } from '@/utils/prices';
+import { formatAge, weightAmounts, type StorePrice } from '@/utils/prices';
 
 interface Props {
   rows: StorePrice[];
@@ -39,7 +39,9 @@ function StoreRow({ row, highlight }: RowProps) {
   const colors = useColors();
   const { price } = row;
   const store = price.store_name ?? price.location_id;
-  const amount = formatPrice(price.amount, price.currency) + (price.price_unit ? ` ${S.perWeight[price.price_unit]}` : '');
+  const byWeight = weightAmounts(price);
+  const amount = byWeight ? `${formatPrice(byWeight.lb, price.currency)} ${S.perWeight.lb}` : formatPrice(price.amount, price.currency);
+  const perKg = byWeight ? `${formatPrice(byWeight.kg, price.currency)} ${S.perWeight.kg}` : null;
   const age = formatAge(row.ageDays);
   const kind = price.source === 'scan' ? S.shelfPrice : S.onlinePrice;
   const note = row.isStale && age ? `${age} · ${S.outdated}` : [kind, age].filter(Boolean).join(' · ');
@@ -48,7 +50,7 @@ function StoreRow({ row, highlight }: RowProps) {
     <View
       style={[styles.row, highlight && { backgroundColor: colors.positiveContainer }]}
       accessible
-      accessibilityLabel={S.storePriceLabel(store, amount, note)}
+      accessibilityLabel={S.storePriceLabel(store, perKg ? S.bothWeights(amount, perKg) : amount, note)}
     >
       <View style={styles.info}>
         <ThemedText style={styles.store} numberOfLines={1}>{store}</ThemedText>
@@ -61,10 +63,11 @@ function StoreRow({ row, highlight }: RowProps) {
       </View>
       <View style={styles.right}>
         <ThemedText style={[styles.amount, highlight && { color: colors.positive }]}>{amount}</ThemedText>
+        {perKg ? <ThemedText style={[styles.sub, { color: colors.textSecondary }]}>{perKg}</ThemedText> : null}
         {highlight ? (
           <Tag tone="positive" label={S.lowest} />
         ) : row.diffFromLowest > 0 ? (
-          <ThemedText style={[styles.diff, { color: colors.textSecondary }]}>
+          <ThemedText style={[styles.sub, { color: colors.textSecondary }]}>
             {S.moreThanLowest(formatPrice(row.diffFromLowest, price.currency))}
           </ThemedText>
         ) : null}
@@ -83,5 +86,5 @@ const styles = StyleSheet.create({
   note: { ...Type.callout, flexShrink: 1 },
   right: { alignItems: 'flex-end', gap: Spacing.xs },
   amount: { ...Type.headline, fontFamily: Fonts.displayBold, fontVariant: ['tabular-nums'] },
-  diff: { ...Type.callout, fontVariant: ['tabular-nums'] },
+  sub: { ...Type.callout, fontVariant: ['tabular-nums'] },
 });

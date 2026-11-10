@@ -7,7 +7,7 @@ import { Fonts, Radius, Spacing, Type } from '@/constants/Theme';
 import { useColors } from '@/hooks/useColors';
 import type { Product } from '@/services/api';
 import { formatPrice } from '@/utils/format';
-import { formatAge, unitPrice, type PriceSummary } from '@/utils/prices';
+import { comparesPerPound, estimateByWeight, formatAge, unitPrice, weightAmounts, type PriceSummary } from '@/utils/prices';
 
 interface Props {
   product: Product;
@@ -21,8 +21,9 @@ export function PriceHero({ product, summary }: Props) {
   const colors = useColors();
   const lowest = summary.lowest;
   const multiStore = summary.rows.length > 1;
-  const perWeight = lowest?.price.price_unit ? ` ${S.perWeight[lowest.price.price_unit]}` : '';
-  const unit = lowest && !lowest.price.price_unit ? unitPrice(lowest.price.amount, product.size) : null;
+  const byWeight = lowest ? weightAmounts(lowest.price) : null;
+  const unit = lowest && !byWeight ? unitPrice(lowest.price.amount, product.size, comparesPerPound(product)) : null;
+  const estimate = estimateByWeight(product);
   const age = formatAge(lowest?.ageDays ?? null);
 
   return (
@@ -34,9 +35,14 @@ export function PriceHero({ product, summary }: Props) {
               {(multiStore ? S.lowestPrice : S.price).toUpperCase()}
             </ThemedText>
             <ThemedText style={styles.amount} accessibilityRole="header">
-              {formatPrice(lowest.price.amount, lowest.price.currency)}
-              <ThemedText style={[styles.perWeight, { color: colors.textSecondary }]}>{perWeight}</ThemedText>
+              {formatPrice(byWeight ? byWeight.lb : lowest.price.amount, lowest.price.currency)}
+              {byWeight ? <ThemedText style={[styles.perWeight, { color: colors.textSecondary }]}>{` ${S.perWeight.lb}`}</ThemedText> : null}
             </ThemedText>
+            {byWeight ? (
+              <ThemedText style={[styles.perKg, { color: colors.textSecondary }]}>
+                {`${formatPrice(byWeight.kg, lowest.price.currency)} ${S.perWeight.kg}`}
+              </ThemedText>
+            ) : null}
             <ThemedText style={styles.where}>
               {S.at}
               <ThemedText style={styles.store}>{lowest.price.store_name ?? lowest.price.location_id}</ThemedText>
@@ -52,7 +58,14 @@ export function PriceHero({ product, summary }: Props) {
       {lowest ? <View style={[styles.divider, { backgroundColor: colors.border }]} /> : null}
 
       <View style={styles.stats}>
-        <Stat value={formatPrice(product.estimated_price)} label={S.estimate} />
+        {estimate ? (
+          <Stat
+            value={`${formatPrice(estimate.lb)} ${S.perWeight.lb}`}
+            label={S.estimateAlso(`${formatPrice(estimate.kg)} ${S.perWeight.kg}`)}
+          />
+        ) : (
+          <Stat value={formatPrice(product.estimated_price)} label={S.estimate} />
+        )}
         <Stat value={String(summary.rows.length)} label={S.stores(summary.rows.length)} />
         {unit ? <Stat value={formatPrice(unit.amount)} label={S.per(unit.per)} /> : null}
       </View>
@@ -82,6 +95,7 @@ const styles = StyleSheet.create({
   caption: { ...Type.caption },
   amount: { ...Type.display, fontVariant: ['tabular-nums'] },
   perWeight: { ...Type.headline },
+  perKg: { ...Type.body, fontVariant: ['tabular-nums'] },
   where: { ...Type.body },
   store: { ...Type.body, fontFamily: Fonts.semibold },
   divider: { height: StyleSheet.hairlineWidth },

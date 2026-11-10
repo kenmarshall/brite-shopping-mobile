@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 import type { LocationPrice } from '@/services/api';
-import { daysSince, formatAge, pricesWithUnits, summarizePrices, unitPrice } from '@/utils/prices';
+import { comparesPerPound, daysSince, estimateByWeight, formatAge, pricesWithUnits, summarizePrices, unitPrice, weightAmounts } from '@/utils/prices';
 
 const NOW = new Date('2026-11-08T12:00:00Z');
 
@@ -89,6 +89,11 @@ describe('unitPrice', () => {
   it('prices multi-count packs per item', () => {
     expect(unitPrice(600, { value: 12, unit: 'count' })).toEqual({ amount: 50, per: 'item' });
   });
+  it('prices weights per lb when asked, leaving volumes per 100 ml', () => {
+    expect(unitPrice(1000, { value: 2, unit: 'lb' }, true)).toEqual({ amount: 500, per: 'lb' });
+    expect(unitPrice(1000, { value: 1, unit: 'kg' }, true)).toEqual({ amount: 453.59, per: 'lb' });
+    expect(unitPrice(1450, { value: 400, unit: 'ml' }, true)).toEqual({ amount: 362.5, per: '100 ml' });
+  });
   it('returns null when the size is missing or unusable', () => {
     expect(unitPrice(100, null)).toBeNull();
     expect(unitPrice(100, { value: null, unit: 'g' })).toBeNull();
@@ -97,10 +102,64 @@ describe('unitPrice', () => {
   });
 });
 
+describe('comparesPerPound', () => {
+  it('is true for fresh produce and meat only', () => {
+    expect(comparesPerPound({ category: 'Fruits & Vegetables' })).toBe(true);
+    expect(comparesPerPound({ category: 'Meat & Seafood' })).toBe(true);
+    expect(comparesPerPound({ category: 'Snacks' })).toBe(false);
+    expect(comparesPerPound({ category: null })).toBe(false);
+  });
+});
+
+describe('weightAmounts', () => {
+  it('gives a by-weight price in both units', () => {
+    const fromKg = weightAmounts({ amount: 1000, price_unit: 'kg' });
+    expect(fromKg?.kg).toBe(1000);
+    expect(fromKg?.lb).toBeCloseTo(453.59, 2);
+    const fromLb = weightAmounts({ amount: 500, price_unit: 'lb' });
+    expect(fromLb?.lb).toBe(500);
+    expect(fromLb?.kg).toBeCloseTo(1102.31, 2);
+  });
+  it('is null for per-item prices', () => {
+    expect(weightAmounts({ amount: 100 })).toBeNull();
+  });
+});
+
+describe('estimateByWeight', () => {
+  it('reads the estimate in the unit the product is sold by', () => {
+    const e = estimateByWeight({ estimated_price: 1000, sold_by: { kind: 'weight', unit: 'kg' } });
+    expect(e?.kg).toBe(1000);
+    expect(e?.lb).toBeCloseTo(453.59, 2);
+  });
+  it('is null for items sold each or without an estimate', () => {
+    expect(estimateByWeight({ estimated_price: 300, sold_by: { kind: 'each', unit: null } })).toBeNull();
+    expect(estimateByWeight({ estimated_price: null, sold_by: { kind: 'weight', unit: 'lb' } })).toBeNull();
+  });
+});
+
 describe('pricesWithUnits', () => {
-  it('marks scraped prices of weight-sold products as per kg or lb', () => {
-    const prices = pricesWithUnits({ sold_by: { kind: 'weight', unit: 'kg' }, location_prices: [price({}), price({ price_unit: 'lb' })] });
-    expect(prices.map((p) => p.price_unit)).toEqual(['kg', 'lb']);
+  it('puts by-weight prices per lb, filling the unit from how the product is sold', () => {
+    const prices = pricesWithUnits({ sold_by: { kind: 'weight', unit: 'kg' }, location_prices: [price({ amount: 1000 }), price({ amount: 500, price_unit: 'lb' })] });
+    expect(prices.map((p) => p.price_unit)).toEqual(['lb', 'lb']);
+    expect(prices[0].amount).toBeCloseTo(453.59, 2);
+    expect(prices[1].amount).toBe(500);
+  });
+  it('converts back to the store\'s per-kg price exactly enough to show', () => {
+    const [p] = pricesWithUnits({ sold_by: { kind: 'weight', unit: 'kg' }, location_prices: [price({ amount: 947.36 })] });
+    expect(weightAmounts(p)?.kg.toFixed(2)).toBe('947.36');
+  });
+  it('compares a per-kg store with a per-lb store', () => {
+    const prices = pricesWithUnits({
+      sold_by: { kind: 'weight', unit: 'kg' },
+      location_prices: [price({ location_id: 'kg', amount: 920 }), price({ location_id: 'lb', amount: 450, price_unit: 'lb' })],
+    });
+    const s = summarizePrices(prices, NOW);
+    expect(s.rows.map((r) => r.price.location_id)).toEqual(['kg', 'lb']);
+    expect(s.savings).toBeCloseTo(32.7, 1);
+  });
+  it('converts a scanned per-kg price on a product not marked as sold by weight', () => {
+    const [p] = pricesWithUnits({ sold_by: { kind: 'each', unit: null }, location_prices: [price({ amount: 1000, price_unit: 'kg' })] });
+    expect(p.price_unit).toBe('lb');
   });
   it('leaves items sold each alone', () => {
     const list = [price({})];

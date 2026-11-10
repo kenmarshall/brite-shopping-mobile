@@ -11,7 +11,7 @@ import { ButtonSize, Fonts, Radius, Spacing, Type } from '@/constants/Theme';
 import { useColors } from '@/hooks/useColors';
 import type { Product } from '@/services/api';
 import { formatPrice, formatProductSize } from '@/utils/format';
-import { pricesWithUnits, summarizePrices, unitPrice } from '@/utils/prices';
+import { comparesPerPound, estimateByWeight, pricesWithUnits, summarizePrices, unitPrice } from '@/utils/prices';
 
 interface Props {
   product: Product;
@@ -28,8 +28,10 @@ function ProductCardBase({ product, quantity, onOpen, onQuantity }: Props) {
   const colors = useColors();
   const summary = summarizePrices(pricesWithUnits(product));
   const lowest = summary.lowest;
-  const amount = lowest?.price.amount ?? product.estimated_price;
-  const unit = amount != null && !lowest?.price.price_unit ? unitPrice(amount, product.size) : null;
+  const estimate = lowest ? null : estimateByWeight(product);
+  const amount = lowest?.price.amount ?? estimate?.lb ?? product.estimated_price;
+  const weightUnit = lowest?.price.price_unit ?? (estimate ? 'lb' : null);
+  const unit = amount != null && !weightUnit ? unitPrice(amount, product.size, comparesPerPound(product)) : null;
   const meta = [formatProductSize(product.size), unit ? S.perUnit(formatPrice(unit.amount), unit.per) : null]
     .filter(Boolean)
     .join(' · ');
@@ -42,7 +44,6 @@ function ProductCardBase({ product, quantity, onOpen, onQuantity }: Props) {
         ? { label: S.lowestOf(summary.rows.length), tone: 'positive' }
         : { label: S.onlyAt(lowest.price.store_name ?? lowest.price.location_id), tone: 'neutral' };
   const hasImage = !!product.image_url && !product.image_url.startsWith('data:image/svg');
-  const weightUnit = lowest?.price.price_unit;
   const price = formatPrice(amount) + (weightUnit ? ` ${Strings.product.perWeight[weightUnit]}` : '');
 
   return (

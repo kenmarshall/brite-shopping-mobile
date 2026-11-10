@@ -5,6 +5,7 @@ import { useShoppingList } from '@/hooks/useShoppingList';
 import type { SnackbarState } from '@/hooks/useSnackbar';
 import type { Product } from '@/services/api';
 import { setQuantity } from '@/services/shoppingList';
+import { estimateByWeight } from '@/utils/prices';
 
 const S = Strings.cart;
 
@@ -35,7 +36,7 @@ export function useListActions(snackbar: SnackbarState, onViewList: () => void, 
     const previous = quantityOf(product._id);
     try {
       await setQuantity(
-        { productId: product._id, name: product.name, estimatedPrice: product.estimated_price, imageUrl: product.image_url },
+        { productId: product._id, name: product.name, estimatedPrice: estimateByWeight(product)?.lb ?? product.estimated_price, imageUrl: product.image_url },
         quantity,
       );
       if (!confirm) return;
