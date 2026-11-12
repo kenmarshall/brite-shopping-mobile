@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GooglePlacesSection } from '@/components/curator/GooglePlacesSection';
 import { StoreRow } from '@/components/curator/StoreRow';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -18,6 +19,8 @@ const S = Strings.curator;
 const SEARCH_DEBOUNCE_MS = 400;
 
 type Position = { lat: number; lng: number } | null;
+// Shorter searches are too broad to send to Google.
+const MIN_GOOGLE_QUERY = 2;
 
 export default function PickStoreScreen() {
   const router = useRouter();
@@ -28,6 +31,7 @@ export default function PickStoreScreen() {
   const [stores, setStores] = useState<CuratorStore[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [searched, setSearched] = useState('');
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Resolve location once; a denial still lets the curator browse and search.
@@ -49,6 +53,7 @@ export default function PickStoreScreen() {
     setError(false);
     try {
       setStores(await listCuratorStores({ lat: pos?.lat, lng: pos?.lng, q }));
+      setSearched(q.trim());
     } catch {
       setError(true);
     } finally {
@@ -67,6 +72,7 @@ export default function PickStoreScreen() {
 
   const openStore = (store: CuratorStore) =>
     router.push({ pathname: '/curator/basket', params: { storeId: store.store_id, storeName: store.store_name } });
+  const searchingGoogle = searched.length >= MIN_GOOGLE_QUERY;
 
   return (
     <ThemedView style={[styles.screen, { paddingTop: insets.top + Spacing.sm }]}>
@@ -123,6 +129,11 @@ export default function PickStoreScreen() {
             </ThemedText>
           }
           ListEmptyComponent={<ThemedText style={[styles.empty, { color: colors.textSecondary }]}>{S.noStores}</ThemedText>}
+          ListFooterComponent={
+            searchingGoogle && position !== undefined ? (
+              <GooglePlacesSection key={searched} query={searched} position={position} onAdded={openStore} />
+            ) : undefined
+          }
           contentContainerStyle={{ paddingBottom: insets.bottom + Spacing.lg }}
           keyboardShouldPersistTaps="handled"
         />

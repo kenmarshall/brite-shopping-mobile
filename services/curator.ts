@@ -32,6 +32,16 @@ export interface CuratorStore {
   basket_needed?: number;
 }
 
+/** A Google Maps listing that isn't in our stores yet. */
+export interface GooglePlace {
+  place_id: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  distance_km?: number;
+}
+
 export type BasketStatus = 'needed' | 'outdated' | 'done';
 
 export interface BasketItem {
@@ -100,6 +110,32 @@ export async function createCuratorStore(store: {
   const res = await curatorRequest<{ store: CuratorStore }>('/curator/stores', {
     method: 'POST',
     body: JSON.stringify(store),
+  });
+  return res.store;
+}
+
+/** Google Maps listings in Jamaica near the curator, minus stores we already have. */
+export async function searchGooglePlaces(params: { q: string; lat?: number; lng?: number }): Promise<GooglePlace[]> {
+  const search = new URLSearchParams({ q: params.q.trim() });
+  if (params.lat != null && params.lng != null) {
+    search.set('lat', String(params.lat));
+    search.set('lng', String(params.lng));
+  }
+  const res = await curatorRequest<{ places: GooglePlace[] }>(`/curator/stores/places?${search.toString()}`);
+  return res.places;
+}
+
+/** Add a Google listing to our stores (the API returns the existing store if it's already there). */
+export async function addGooglePlace(place: GooglePlace): Promise<CuratorStore> {
+  const res = await curatorRequest<{ store: CuratorStore }>('/curator/stores', {
+    method: 'POST',
+    body: JSON.stringify({
+      place_id: place.place_id,
+      store_name: place.name,
+      address: place.address,
+      latitude: place.latitude,
+      longitude: place.longitude,
+    }),
   });
   return res.store;
 }
